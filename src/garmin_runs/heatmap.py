@@ -1,10 +1,9 @@
-"""Interactive Leaflet heatmap of every GPS run."""
+"""Interactive Leaflet heatmap of every GPS run, one coloured heat layer per year."""
 from __future__ import annotations
 
 from pathlib import Path
 
 import folium
-import numpy as np
 import pandas as pd
 from folium.plugins import HeatMap
 
@@ -19,12 +18,25 @@ ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas"
 # a set; beyond that colours start to collide, so years 4+ reuse a neutral grey.
 YEAR_COLORS = ["#3987e5", "#d95926", "#199e70"]
 OLDER_COLOR = "#9a9993"
+ALL_YEARS_COLOR = "#9085e9"  # violet: a palette slot no year uses, and visible on the dark map
 
 
 def year_colors(years: list[int]) -> dict[int, str]:
     years = sorted(years)
     recent = years[-len(YEAR_COLORS):]  # newest years get the distinct colours
     return {y: YEAR_COLORS[recent.index(y)] if y in recent else OLDER_COLOR for y in years}
+
+
+def _mix(hex_color: str, other: str, f: float) -> str:
+    a = [int(hex_color[i:i + 2], 16) for i in (1, 3, 5)]
+    b = [int(other[i:i + 2], 16) for i in (1, 3, 5)]
+    return "#" + "".join(f"{round(x + (y - x) * f):02x}" for x, y in zip(a, b))
+
+
+def heat_gradient(color: str) -> dict[float, str]:
+    """Single-hue ramp for one year: dark shade -> the year colour -> light tint at the hottest."""
+    return {0.2: _mix(color, "#000000", 0.45), 0.5: color,
+            0.8: _mix(color, "#ffffff", 0.45), 1.0: _mix(color, "#ffffff", 0.8)}
 
 
 def _trim(g: pd.DataFrame, meters: float) -> pd.DataFrame:
@@ -48,6 +60,11 @@ def _areas(tracks: pd.DataFrame) -> list[dict]:
     return sorted(areas, key=lambda a: -a["runs"])
 
 
+def _swatch(css_background: str) -> str:
+    return (f'<span style="display:inline-block;width:14px;height:6px;border-radius:3px;'
+            f'background:{css_background};vertical-align:middle;margin:0 6px 2px 0"></span>')
+
+
 def build(trim_meters: float = 0) -> Path:
     tracks = pd.read_parquet(TRACKS)
     runs = load_runs().set_index("activity_id")
@@ -67,25 +84,39 @@ def build(trim_meters: float = 0) -> Path:
         ).add_to(m)
     m.fit_bounds(areas[0]["bounds"])
 
-    # Single-hue heat layer (off by default: its blue would read as a year colour)
-    HeatMap(tracks[["lat", "lon"]].to_numpy().tolist(), name="Heat (all years)", show=False,
-            radius=6, blur=6, min_opacity=0.25, max_zoom=16,
-            gradient={0.2: "#184f95", 0.45: "#3987e5", 0.7: "#86b6ef", 1.0: "#ffffff"}).add_to(m)
+    run_year = runs["start"].dt.year
+    tracks = tracks.assign(year=tracks["activity_id"].map(run_year))
+    years = sorted(tracks["year"].unique())
+    colors = year_colors(years)
 
-    years = runs.loc[tracks["activity_id"].unique(), "start"].dt.year
-    colors = year_colors(years.unique().tolist())
-    # Oldest added first so newer years draw on top
-    for year in sorted(years.unique()):
-        ids = years[years == year].index
-        color = colors[year]
-        swatch = (f'<span style="display:inline-block;width:14px;height:4px;border-radius:2px;'
-                  f'background:{color};vertical-align:middle;margin:0 6px 2px 0"></span>')
-        fg = folium.FeatureGroup(name=f"{swatch}{year} · {len(ids)} runs")
+    # All years combined, in a hue no single year uses.
+    # Off by default; it's an alternative view to the per-year layers, not something to stack.
+    all_grad = heat_gradient(ALL_YEARS_COLOR)
+    HeatMap(tracks[["lat", "lon"]].round(5).to_numpy().tolist(),
+            name=f"{_swatch('linear-gradient(90deg,' + ','.join(all_grad.values()) + ')')}"
+                 f"Heat all years · {tracks['activity_id'].nunique()} runs",
+            show=False, radius=6, blur=6, min_opacity=0.25, max_zoom=16, gradient=all_grad).add_to(m)
+
+    # One heat layer per year, each in its own hue (oldest first so newer years draw on top)
+    for year in years:
+        pts = tracks.loc[tracks["year"] == year, ["lat", "lon"]].round(5)
+        n_runs = tracks.loc[tracks["year"] == year, "activity_id"].nunique()
+        grad = heat_gradient(colors[year])
+        HeatMap(pts.to_numpy().tolist(),
+                name=f"{_swatch('linear-gradient(90deg,' + ','.join(grad.values()) + ')')}"
+                     f"Heat {year} · {n_runs} runs",
+                radius=6, blur=6, min_opacity=0.25, max_zoom=16, gradient=grad).add_to(m)
+
+    # Individual route lines per year (off by default; hover shows the run)
+    for year in years:
+        ids = tracks.loc[tracks["year"] == year, "activity_id"].unique()
+        fg = folium.FeatureGroup(name=f"{_swatch(colors[year])}Routes {year}", show=False)
         for aid in ids:
             g = tracks[tracks["activity_id"] == aid]
             r = runs.loc[aid]
             folium.PolyLine(
-                g[["lat", "lon"]].to_numpy().tolist(), color=color, weight=2.5, opacity=0.6,
+                g[["lat", "lon"]].round(5).to_numpy().tolist(),  # ~1 m: plenty, keeps the file small
+                color=colors[year], weight=2.5, opacity=0.6,
                 tooltip=f"{r['name']} · {r['start']:%Y-%m-%d} · {r['km']:.1f} km",
             ).add_to(fg)
         fg.add_to(m)
@@ -115,5 +146,6 @@ def build(trim_meters: float = 0) -> Path:
     path = OUT / "heatmap.html"
     m.save(path)
     n = tracks["activity_id"].nunique()
-    print(f"Heatmap: {n} runs, {len(tracks):,} points, {len(areas)} area(s) -> {path}")
+    print(f"Heatmap: {n} runs, {len(tracks):,} points, {len(years)} year layer(s), "
+          f"{len(areas)} area(s) -> {path}")
     return path
