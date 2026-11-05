@@ -59,7 +59,14 @@ def main() -> None:
     sg.add_argument("--top", type=int, default=5, help="how many non-overlapping segments to report")
     sg.set_defaults(func=lambda a: __import__("garmin_runs.segments", fromlist=["run"]).run(a.length, a.years, a.top))
 
-    al = sub.add_parser("all", help="fetch, parse, map, report")
+    ar = sub.add_parser("area", help="graph of every run + animated quarterly runnable area in Toronto")
+    ar.add_argument("--buffer", type=float, default=100,
+                    help="metres either side of a run street that count as runnable")
+    ar.add_argument("--trim-meters", type=float, default=0,
+                    help="ignore the first/last N metres of each run (privacy)")
+    ar.set_defaults(func=lambda a: __import__("garmin_runs.runarea", fromlist=["build"]).build(a.buffer, a.trim_meters))
+
+    al = sub.add_parser("all",help="fetch, parse, map, report")
     al.add_argument("--trim-meters", type=float, default=0)
 
     def _all(a):

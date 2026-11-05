@@ -68,4 +68,9 @@ Pulls the owner's own Garmin Connect data through the **Garmin Personal API**. T
   - Segments are found on a 25 m grid. Candidate stretches are filtered: the ends must be at least 50% of the length apart, and the pace must be faster than 9 min/km.
   - Segments are ranked by runs with a **timed** pass, and parallel paths are rejected.
   - Hourly air temperature comes from Open-Meteo, archive plus forecast APIs, with the location rounded to 0.1°. It is cached in `data/weather_*.json`. The user approved this external call.
-- **Visual check:** screenshot an output with headless Edge (`msedge --headless=new --screenshot=... file:///...`), using a fresh `--user-data-dir` so cached tiles don't hide problems.
+- **`runarea.py`** writes `output/runnable_area.html` and `runnable_area.csv` (command `area [--buffer 100] [--trim-meters 0]`).
+  - Builds a graph on a 25 m Web Mercator grid: cells are nodes, steps between neighbouring cells are edges, built with networkx. Only edges inside the Toronto bounding box count.
+  - Runnable area for each quarter, cumulative: a `--buffer` corridor around the edges plus enclosed holes, computed with scipy `distance_transform_edt` and `binary_fill_holes`.
+  - "Covered" area (`covered_km2`) uses the same rule on one quarter's runs alone, repeats included, and is not cumulative. Runs are assigned to quarters in local time (`America/Toronto`). The timeline starts at 2024 Q1 or the first quarter with data, whichever is later; at present that is 2024 Q2.
+  - The page is an animated Leaflet canvas with the rasters sent zlib + base64 and decoded with `DecompressionStream`. The URL hash `#<quarter>.<progress>` freezes on a frame, which is useful for headless screenshots because headless Edge barely advances the animation.
+- **Visual check:** screenshot an output with headless Edge (`msedge --headless=new --screenshot=... file:///...`), using a fresh `--user-data-dir` so cached tiles don't hide problems. In PowerShell, launch it with `Start-Process -Wait`, or the screenshot won't be written before the command returns.
