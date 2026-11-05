@@ -1,0 +1,12 @@
+# Secrets
+.env
+*.key
+
+# Personal data and generated output (contains GPS traces of where you run)
+data/
+output/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
