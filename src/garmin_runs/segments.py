@@ -14,6 +14,7 @@ import requests
 
 from .analyze import fmt_dur, fmt_pace, load_runs
 from .fetch import DATA
+from .heatmap import toronto_only
 from .parse import TRACKS
 
 OUT = Path("output")
@@ -226,6 +227,7 @@ def run(length_m: float = 1000, years: float = 2, top: int = 5) -> Path:
     ts = pd.to_datetime(tracks["ts"], utc=True)
     recent_ids = set(runs.loc[runs["start"] >= since.replace(tzinfo=None), "activity_id"])
     tracks = tracks[tracks["activity_id"].isin(recent_ids) & (ts >= since)]
+    tracks = toronto_only(tracks)  # segments (and their map) are Toronto-only
 
     # Over-fetch candidates, time them, then rank by runs with a *timed* pass: a run that
     # merely passes near a segment (e.g. on a parallel path) doesn't count.

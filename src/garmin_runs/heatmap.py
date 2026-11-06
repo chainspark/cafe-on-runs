@@ -47,17 +47,18 @@ def _trim(g: pd.DataFrame, meters: float) -> pd.DataFrame:
     return g[(d >= d.iloc[0] + meters) & (d <= d.iloc[-1] - meters)]
 
 
-def _areas(tracks: pd.DataFrame) -> list[dict]:
-    """Group runs into areas (~50 km cells) so far-apart places get their own jump button."""
-    first = tracks.groupby("activity_id")[["lat", "lon"]].median()
-    first["cell"] = list(zip((first["lat"] / 0.5).round(), (first["lon"] / 0.5).round()))
-    areas = []
-    for _, ids in first.groupby("cell").groups.items():
-        pts = tracks[tracks["activity_id"].isin(ids)]
-        lo, hi = pts[["lat", "lon"]].quantile(0.01), pts[["lat", "lon"]].quantile(0.99)
-        areas.append({"runs": len(ids), "bounds": [[lo.lat, lo.lon], [hi.lat, hi.lon]],
-                      "center": (pts["lat"].median(), pts["lon"].median())})
-    return sorted(areas, key=lambda a: -a["runs"])
+MIN_POINTS_IN_CITY = 20  # a run needs at least ~100 m inside Toronto to be drawn
+
+
+def toronto_only(tracks: pd.DataFrame) -> pd.DataFrame:
+    """Keep only GPS points inside the City of Toronto bounding box (shared with runarea.py)."""
+    from .runarea import TORONTO  # imported here: runarea imports from this module
+
+    lat_lo, lat_hi, lon_lo, lon_hi = TORONTO
+    inside = tracks["lat"].between(lat_lo, lat_hi) & tracks["lon"].between(lon_lo, lon_hi)
+    t = tracks[inside]
+    counts = t.groupby("activity_id")["lat"].transform("size")
+    return t[counts >= MIN_POINTS_IN_CITY]
 
 
 def _swatch(css_background: str) -> str:
@@ -70,11 +71,18 @@ def build(trim_meters: float = 0) -> Path:
     runs = load_runs().set_index("activity_id")
     tracks = tracks[tracks["activity_id"].isin(runs.index)]
     tracks = pd.concat([_trim(g, trim_meters) for _, g in tracks.groupby("activity_id")])
-    areas = _areas(tracks)
+    tracks = toronto_only(tracks)
+    if tracks.empty:
+        raise SystemExit("No runs inside Toronto.")
 
     # Esri dark-gray canvas: no API key, and (unlike tile.openstreetmap.org) works when the
     # HTML is opened straight from disk, where browsers send no Referer header.
-    m = folium.Map(tiles=None, control_scale=True, prefer_canvas=True, max_zoom=19)
+    # Starts on the whole City of Toronto at the largest *whole* zoom level where it fits; that
+    # is also the zoom-out limit. Zoom in and pan freely, but panning is held inside the city.
+    # (Fractional zoom would fill the window more exactly, but the basemap tiles didn't render
+    # reliably with it.) max_bounds_viscosity 1 makes the city edge a hard stop when dragging.
+    m = folium.Map(tiles=None, control_scale=True, prefer_canvas=True, max_zoom=19,
+                   fade_animation=False, max_bounds_viscosity=1.0)
     for layer, name in [("World_Dark_Gray_Base", "Dark basemap"), ("World_Dark_Gray_Reference", "Labels")]:
         folium.TileLayer(
             tiles=f"{ESRI}/{layer}/MapServer/tile/{{z}}/{{y}}/{{x}}",
@@ -82,7 +90,10 @@ def build(trim_meters: float = 0) -> Path:
             name=name, overlay=layer.endswith("Reference"), control=layer.endswith("Reference"),
             max_native_zoom=16, max_zoom=19,
         ).add_to(m)
-    m.fit_bounds(areas[0]["bounds"])
+    from .runarea import TORONTO
+    lat_lo, lat_hi, lon_lo, lon_hi = TORONTO
+    city = [[lat_lo, lon_lo], [lat_hi, lon_hi]]
+    m.fit_bounds(city)
 
     run_year = runs["start"].dt.year
     tracks = tracks.assign(year=tracks["activity_id"].map(run_year))
@@ -122,30 +133,38 @@ def build(trim_meters: float = 0) -> Path:
         fg.add_to(m)
     folium.LayerControl(collapsed=False).add_to(m)
 
-    # "Jump to area" buttons for runs in far-apart places
-    buttons = "".join(
-        f'<button onclick="window._map.fitBounds({a["bounds"]})">'
-        f'{a["center"][0]:.2f}, {a["center"][1]:.2f} · {a["runs"]} runs</button>'
-        for a in areas
-    )
-    m.get_root().html.add_child(folium.Element(f"""
-<style>
- .leaflet-container{{background:#1a1a19}}
- #areas{{position:fixed;bottom:64px;left:12px;z-index:1000;display:flex;flex-direction:column;gap:4px;
-        font:12px system-ui,-apple-system,"Segoe UI",sans-serif}}
- #areas b{{color:#f0efec;text-shadow:0 1px 2px #000}}
- #areas button{{background:#1a1a19;color:#f0efec;border:1px solid #383835;border-radius:4px;
-               padding:4px 8px;cursor:pointer;text-align:left}}
- #areas button:hover{{background:#2c2c2a}}
-</style>
-<div id="areas"><b>Jump to area</b>{buttons}</div>
-<script>window.addEventListener('load',()=>{{window._map={m.get_name()};}});</script>
-"""))
+    m.get_root().html.add_child(folium.Element(
+        "<style>.leaflet-container{background:#1a1a19}</style>"
+        f"""<script>
+window.addEventListener('load', () => {{
+  const map = window._map = {m.get_name()}, city = L.latLngBounds({city});
+  // zoom-out limit = the zoom at which the whole city fits; panning stays inside the city
+  map.setMaxBounds(city.pad(0.02));
+  const limit = () => {{
+    const z = map.getBoundsZoom(city, false, L.point(16, 16));  // largest whole zoom that fits
+    map.setMinZoom(z);
+    if (map.getZoom() < z) map.setZoom(z, {{animate: false}});
+    return z;
+  }};
+  map.setView(city.getCenter(), limit(), {{animate: false}});
+  map.on('resize', limit);
+
+  // show only Toronto: blank out everything outside the city box and outline the city
+  map.createPane('outside');
+  map.getPane('outside').style.zIndex = 350;          // above tiles (200), below heat/routes (400)
+  map.getPane('outside').style.pointerEvents = 'none';
+  const world = [[-90, -360], [-90, 360], [90, 360], [90, -360]];
+  const box = [city.getSouthWest(), city.getNorthWest(), city.getNorthEast(), city.getSouthEast()];
+  L.polygon([world, box], {{pane: 'outside', stroke: false, fillColor: '#1a1a19',
+                            fillOpacity: 1, interactive: false}}).addTo(map);
+  L.rectangle(city, {{pane: 'outside', color: '#898781', weight: 1, dashArray: '4 4',
+                      fill: false, interactive: false}}).addTo(map);
+}});
+</script>"""))
 
     OUT.mkdir(exist_ok=True)
     path = OUT / "heatmap.html"
     m.save(path)
     n = tracks["activity_id"].nunique()
-    print(f"Heatmap: {n} runs, {len(tracks):,} points, {len(years)} year layer(s), "
-          f"{len(areas)} area(s) -> {path}")
+    print(f"Heatmap (Toronto): {n} runs, {len(tracks):,} points, {len(years)} year layer(s) -> {path}")
     return path
