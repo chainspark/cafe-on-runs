@@ -1,12 +1,13 @@
 """3D flythrough of a race: the GPS track animated over OpenStreetMap 3D buildings (MapLibre GL).
 
-Writes one page per entry in RACES (command `race3d`, into output/).
+Writes one page per entry in RACES (command `race3d` into output/; `publish` also builds them
+into docs/ and the public report links to them).
 
 Privacy: these pages show the *full, unscrubbed* track - start, finish and any stretch that
-crosses a privacy zone (the 2026 Toronto Marathon crosses one from km 26 to the finish). They are
-NOT part of `publish` yet: privacy.check scans `[lat, lon]` pairs, and this page stores separate
-lon/lat arrays, so it would pass the check without actually being checked. Publishing needs an
-explicit, reported exemption in privacy.check that the owner approves.
+crosses a privacy zone (the 2026 Toronto Marathon crosses one from km 26 to the finish). That is
+acceptable only for public races on official courses, approved by the owner one by one: add an
+activity to RACES only with the owner's explicit OK. privacy.check skips its coordinate scan for
+these files (and prints that it did); the forbidden-name scan still runs.
 
 The page loads MapLibre from unpkg and vector tiles from OpenFreeMap (no API key) at view time.
 """

@@ -1,6 +1,7 @@
 """Build the public, privacy-safe site into docs/ (served by GitHub Pages from main:/docs).
 
-Published: report (as index.html too), heatmap, most-run segments.
+Published: report (as index.html too), heatmap, most-run segments, and a 3D flythrough of each
+owner-approved public race in race3d.RACES (full course, exempt from the coordinate scan).
 Never published: the neighbourhood page, CSVs, data/ (raw GPS, privacy zones, weather cache).
 
 Updating is manual: `python -m garmin_runs publish --fetch` pulls new activities with the
@@ -12,10 +13,10 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from . import heatmap, privacy, report, segments
+from . import heatmap, privacy, race3d, report, segments
 
 SITE = Path("docs")
-PAGES = ["index.html", "report.html", "heatmap.html", "segment.html", ".nojekyll"]
+PAGES = ["index.html", "report.html", "heatmap.html", "segment.html", ".nojekyll", *race3d.files()]
 
 
 def _forbidden() -> list[str]:
@@ -43,12 +44,13 @@ def publish(fetch_new: bool = False, out_dir: Path = SITE, trim_m: float = priva
 
     heatmap.build(trim_m, out_dir=out_dir, public=True)
     segments.run(out_dir=out_dir, public=True)
+    race3d.build(out_dir)  # before the report, which links to the race pages that exist
     report.build(out_dir=out_dir, public=True)
     shutil.copyfile(out_dir / "report.html", out_dir / "index.html")
     (out_dir / ".nojekyll").touch()  # serve files as-is, no Jekyll processing
 
     try:
-        privacy.check(sorted(out_dir.glob("*.html")), _forbidden())
+        privacy.check(sorted(out_dir.glob("*.html")), _forbidden(), public_races=set(race3d.files()))
     except SystemExit:
         for name in PAGES:  # don't leave unsafe pages lying around to be committed
             (out_dir / name).unlink(missing_ok=True)

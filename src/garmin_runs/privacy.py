@@ -125,11 +125,15 @@ def apply(tracks: pd.DataFrame, trim_m: float = DEFAULT_TRIM_M) -> pd.DataFrame:
 _PAIR = re.compile(r"\[\s*(-?\d{1,2}\.\d{3,})\s*,\s*(-?\d{1,3}\.\d{3,})\s*\]")
 
 
-def check(files: list[Path], forbidden: list[str]) -> None:
+def check(files: list[Path], forbidden: list[str], public_races: set[str] = frozenset()) -> None:
     """Raise if a published page leaks a location near a real zone, or a forbidden string.
 
     Around each *real* centre, radius minus the maximum shift is guaranteed hidden whatever
     the shift was, so any published coordinate inside that is a leak.
+
+    `public_races`: file names of owner-approved public-race pages (race3d.RACES), which show
+    an official race course in full. They skip the coordinate scan only - reported, never
+    silent - and still get the forbidden-name scan.
     """
     zs = zones()
     problems = []
@@ -138,6 +142,9 @@ def check(files: list[Path], forbidden: list[str]) -> None:
         for word in forbidden:
             if word and word.lower() in text.lower():
                 problems.append(f"{f.name}: mentions '{word}'")
+        if f.name in public_races:
+            print(f"  {f.name}: coordinate scan skipped - owner-approved public race course")
+            continue
         pairs = np.array([(float(a), float(b)) for a, b in _PAIR.findall(text)
                           if -90 <= float(a) <= 90 and -180 <= float(b) <= 180])
         if zs and len(pairs):
