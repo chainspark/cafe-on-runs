@@ -45,6 +45,8 @@ Toronto Open Data centreline ──► data/opendata/            ├─► cafes
 - **The dataset is compiled into the binary:** `embedded.cpp` `#include`s the bytes `cafes.py` generates.
 - **Python** (`src/cafe_tolerance/`) does everything else: fetching, parsing, export, the Docker build, page assembly and privacy.
 
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the components, data flow, dataset format, WebAssembly interface, privacy design and design decisions.
+
 ## Setup
 
 - Python 3.12+ with [uv](https://docs.astral.sh/uv/): `uv sync`

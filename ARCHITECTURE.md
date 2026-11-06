@@ -1,0 +1,339 @@
+# Architecture
+
+Cafe Tolerance builds one self-contained HTML page. The page inspects the owner's runs past
+Toronto cafes using two GD&T callouts: **true position** ⌖ and **profile of a line** ⌒.
+
+- **Python** gathers and scrubs the data, then packs it into a compact binary dataset.
+- **C++**, compiled to WebAssembly, holds the dataset and does all of the geometry.
+- **The browser page** draws the map, sends slider settings to the engine, and renders the results.
+
+This document covers how the parts fit together and why they are built this way. Setup and
+commands are in [README.md](README.md). Working rules (environment, privacy, conventions) are in
+[CLAUDE.md](CLAUDE.md).
+
+## 1. System overview
+
+```
+                         ┌──────────────────────────── Python (src/cafe_tolerance) ──────────────────────────┐
+ Garmin Personal API ──► │ fetch ─► data/raw/*.zip ─► parse ─► data/tracks.parquet ─┐                        │
+ OSM Overpass        ──► │ cafes.fetch_cafes ─► data/cafes_osm.json ─► exclusions ──┤                        │
+ Toronto Open Data   ──► │ opendata ─► data/opendata/*.geojson (centreline) ────────┤                        │
+                         │                       (public build: privacy.apply) ─────┤                        │
+                         │                                                          ▼                        │
+                         │                       cafes.export ─► cafe_blob.encode ─► generated/dataset_*.inc │
+                         └──────────────────────────────────────────────────────────┬────────────────────────┘
+                                                                                    │ #include
+                         ┌──────────── C++20 (wasm/cafe_tol), em++ in Docker ───────▼────────────────────────┐
+                         │ embedded.cpp (kDataset[]) ─► dataset ─► match ─► gdt (Engine) ◄── api.cpp (C ABI) │
+                         └──────────────────────────────────────────────────────────┬────────────────────────┘
+                                                                                    │ -sSINGLE_FILE
+                                                       build/cafe_tol_<target>.js (wasm inlined as base64)
+                                                                                    │ cafes.build inlines it
+                         ┌──────────── Browser ─────────────────────────────────────▼────────────────────────┐
+                         │ cafes.html: Leaflet map + glow layer + pins + panel ◄── typed-array views on heap │
+                         └───────────────────────────────────────────────────────────────────────────────────┘
+                                   output/cafe_tolerance.html (private)  ·  docs/index.html (public)
+```
+
+The page needs no server and loads no data at view time. Only Leaflet, fonts and map tiles come
+from the network. Everything else, including the GPS data, is inside the one HTML file. It runs
+from `file://`.
+
+## 2. Components
+
+| Path | Language | Responsibility |
+|---|---|---|
+| `src/cafe_tolerance/api.py` | Python | Garmin Personal API client wrapper: auth, retry/backoff |
+| `fetch.py` | Python | Activity summaries → `data/activities.json`; FIT ZIPs for GPS runs → `data/raw/` |
+| `parse.py` | Python | FIT `record` messages → `data/tracks.parquet` (~5 m spacing, UTC timestamps) |
+| `opendata.py` | Python | Downloads and caches City of Toronto datasets; `TORONTO` bbox; `STREET_CLASSES` |
+| `exclusions.py` | Python | Chain/franchise and not-a-cafe lists; `excluded(name, brand)` |
+| `cafe_blob.py` | Python | CAFETOL1 encoder/decoder; rebuilds a wasm module's memory image to find the dataset |
+| `cafes.py` | Python | Overpass fetch, run/street/cafe selection, export, Docker compile, page assembly |
+| `cafes.html` | HTML/JS | Page template: map layers, controls, panel, calls into the engine |
+| `privacy.py` | Python | Privacy zones, track scrubbing (`apply`), pre-publish scan (`check`), forbidden names |
+| `publish.py` | Python | Public build into `docs/` + privacy check; deletes the output if the check fails |
+| `wasm/cafe_tol/geom.hpp` | C++ | Projection, point-to-segment distance, canonical normal, uniform grid |
+| `dataset.{hpp,cpp}` | C++ | CAFETOL1 decode (and encode, for tests) |
+| `match.{hpp,cpp}` | C++ | Street network, flattened track, point → street matching |
+| `gdt.{hpp,cpp}` | C++ | `Engine`: passes, parts, yields, status, per-cafe detail, band polygons |
+| `api.cpp` | C++ | `extern "C"` WebAssembly interface; owns the result buffers |
+| `embedded.cpp` | C++ | Compiles the generated dataset bytes into the binary |
+| `tests/test_gdt.cpp` | C++ | Tests on synthetic geometry, run under node in the container |
+| `build.sh` | bash | `test` / `private` / `public` targets, run inside `emscripten/emsdk:4.0.10` |
+
+## 3. Data flow
+
+### 3.1 Inputs and caches (all in `data/`, gitignored)
+
+| Artifact | Produced by | Notes |
+|---|---|---|
+| `activities.json` | `fetch` | All sports. A run is any activity whose `typeKey` contains `running` |
+| `raw/<id>.zip` | `fetch` | Original FIT files. Written atomically. Runs without GPS are skipped |
+| `tracks.parquet` | `parse` | `activity_id, ts, lat, lon, distance_m, speed_ms, hr, alt_m` |
+| `cafes_osm.json` | `cafes.fetch_cafes` | `osm_id` (ways are stored negative), `name`, `lat`, `lon`, `brand` |
+| `opendata/*.geojson` | `opendata.download` | Street centreline and neighbourhood boundaries |
+| `privacy.json` | `privacy.zones` | Real zone centres and their random shifts. **Never publish this file.** Keep it stable |
+
+### 3.2 Export (`cafes.export(public)`)
+
+1. **Tracks.**
+   - Read `tracks.parquet`.
+   - Public build only: run `privacy.apply`, which trims the first and last 500 m of every run and removes every point inside a privacy zone.
+   - Keep points inside the Toronto bounding box, and runs with at least 20 such points.
+2. **Runs.**
+   - Split each run into **parts** wherever consecutive points are more than `GAP_M` = 50 m apart, by position or by `distance_m`. This covers privacy holes and GPS dropouts.
+   - Take the date from `startTimeLocal`.
+3. **Cafes.**
+   - Load the Overpass cache.
+   - Drop the excluded places: chains, franchises and non-cafes, matched by OSM name or brand.
+   - Keep cafes within `R_MAX_M` = 300 m of any run point. This is the largest R the page offers, so data beyond it is never needed.
+   - Public build only: also drop cafes within (shifted zone radius + 300 m) of any zone, and cafes whose name contains a forbidden word.
+4. **Streets (the nominals).**
+   - Keep centreline pieces of the runnable classes (Local, Collector, Minor/Major Arterial, Trail, Walkway) that come within 300 m of a kept cafe.
+   - Public build only: drop pieces with any vertex inside a shifted zone, and pieces whose name contains a forbidden word.
+5. **Encode** with `cafe_blob.encode`, then write `wasm/cafe_tol/generated/dataset_<target>.inc` as a comma-separated byte list.
+
+Typical size (private build): 260 runs, 177k points, ~8.9k street pieces and ~570 cafes come
+to about 0.73 MB of dataset. The finished page is about 1.1 MB.
+
+### 3.3 Build (`cafes.compile_wasm`, `cafes.build`)
+
+1. `docker run emscripten/emsdk:4.0.10 bash build.sh <target>` compiles `dataset.cpp match.cpp gdt.cpp api.cpp embedded.cpp`. The flags are `-O3 -std=c++20 -sMODULARIZE -sEXPORT_NAME=CafeTol -sSINGLE_FILE=1 -sENVIRONMENT=web -sALLOW_MEMORY_GROWTH -sINITIAL_MEMORY=64MB`, plus an explicit export list.
+2. `cafes.build` inlines `build/cafe_tol_<target>.js` into `cafes.html`, escaping `</script`. It then writes `output/cafe_tolerance.html` for a private build, or `<out>/index.html` for a public one.
+3. `publish` runs the public build into `docs/`, then runs `privacy.check`.
+
+## 4. Dataset format: CAFETOL1
+
+The format is little-endian. The writer is `cafe_blob.encode` (Python). The readers are
+`dataset.cpp` (C++) and `cafe_blob.decode` (Python, used by the privacy scan).
+
+```
+magic      "CAFETOL1"                       8 bytes
+version    u32 = 1
+flags      u32                              bit 0: public (scrubbed) build
+n_runs     u32
+  run:     i64 activity_id, u16 year, u8 month, u8 day, u16 n_parts, n_parts × coords
+n_streets  u32
+  piece:   u32 centreline_id, u8 class (index into STREET_CLASSES), u16 name_len, utf8 name, coords
+n_cafes    u32
+  cafe:    i32 lat_e5, i32 lon_e5, i64 osm_id, u16 name_len, utf8 name
+coords     u32 n, then n × (zigzag-varint Δlat, zigzag-varint Δlon) in 1e-5° (~1 m); the first pair is absolute
+```
+
+- **Small deltas:** points are about 5 m apart, so most deltas fit in one byte.
+- **Truncated input:** `decode` rejects it.
+- **Version mismatch:** the engine refuses to load the dataset.
+- **Changing the format:** bump `VERSION` in both `cafe_blob.py` and `dataset.hpp`, and update both readers and the round-trip test.
+
+## 5. The C++ engine
+
+### 5.1 Coordinates
+
+Every point is projected to local metres with an equirectangular projection at a fixed
+reference latitude: `x = lon · 111320 · cos(43.7°)`, `y = lat · 110540`. This is the same
+projection the Python analyses use. Across the City of Toronto the error is well under 1%, which
+is small compared with GPS noise and with the tolerances involved.
+
+### 5.2 `Engine::load`: work done once at start-up
+
+1. **`build_network`:**
+   - Projects every street piece.
+   - Interns street names into `names` and gives each piece a `piece_name` id.
+   - Inserts every segment's bounding box into a 25 m uniform grid (`seg_grid`).
+2. **`flatten_runs`:** concatenates every run part into flat arrays `p`, `ll`, `pt_part`, with `part_start`/`part_run` offsets. Everything after this addresses points by global index.
+3. **`match_points`:** for each point, takes its heading from its neighbours (i−1 → i+1) within the same part, then finds the nearest segment such that:
+   - the distance is ≤ `kMatchM` = 25 m, and
+   - |cos(angle between heading and segment)| ≥ cos 35°, which ignores direction.
+
+   Each matched point stores its piece, street name, signed offset and canonical normal.
+4. **Blip smoothing:** within a part, a stretch of fewer than `kMinStreetPts` = 4 points matched to a street that differs from both its neighbours is reset to unmatched. Without this, briefly clipping a cross street at an intersection would split a pass.
+5. **Point grid:** every run point goes into a 50 m grid (`pt_grid_`), which makes "points within R of this cafe" quick to answer.
+
+**Canonical normal.** The City digitises centreline pieces in either direction. Offsets are
+therefore measured along a normal whose orientation is fixed: it points north for east–west
+streets and west for north–south streets. That makes the sign of the bias mean "which side of
+the street", whichever way each piece was drawn.
+
+### 5.3 `Engine::set_radius(R)`: re-cut passes, run when R changes
+
+For each cafe:
+
+1. Collect the run points within R and sort them by index. Runs of consecutive indices in the same part are the contiguous stretches.
+2. Split each stretch where the matched **street name** changes, carrying unmatched points along with the current street. Each piece is a **pass** of one run on one street, and needs at least 3 points.
+3. **`measure`** each pass:
+   - **`d`:** the exact closest approach of the pass polyline to the cafe (point-to-segment).
+   - **`prof`:** 2 × max |offset| over **all** of the pass's points. A stray point that matched nothing or another street is measured against the pass's own street (`offset_to_street`, searched within 300 m).
+   - **`mean_off`** (the bias), the mean normal, and the centreline pieces used.
+
+Passes are stored per cafe, so the other sliders never re-cut them.
+
+### 5.4 `Engine::evaluate(Settings)`: re-score, run on every other slider or year change
+
+For each cafe:
+
+1. **Group passes into parts.** Passes are filtered by the year bitmask (bit = year − 2000), then grouped into **parts**, one per run.
+   - ⌖ uses the run's closest pass: Ø = 2 × min d.
+   - ⌒ uses the run's worst pass: max prof.
+2. **Accept or reject each run.** A run is accepted when Ø ≤ Ø_tol **and** prof ≤ band.
+3. **Work out the yields.** There are three: ⌖, ⌒ and combined, plus the best and median Ø.
+4. **`classify`** gives the status:
+
+| Status | Condition (yields vs acceptance level a) |
+|---|---|
+| `kFew` | fewer than 3 runs |
+| `kBoth` | combined yield ≥ a |
+| `kApart` | ⌖ ≥ a and ⌒ ≥ a, but combined < a (the failures fall on different runs) |
+| `kPosOnly` / `kProfOnly` | only that callout reaches a |
+| `kNeither` | neither does |
+
+### 5.5 `Engine::detail(cafe, Settings)`: the selected cafe only
+
+- **Passes and parts:** the year-filtered passes, and the parts (runs).
+- **Per-street features:** passes, ⌖ count, ⌒ count, both count, p95 profile, bias and mean normal.
+- **Drawing geometry:**
+  - **nominals:** the centreline pieces used, densified to 5 m and clipped to R
+  - **bands:** for each nominal, the ±band/2 polygon around it
+
+### 5.6 Cost
+
+- **`load`:** linear in points, with one grid lookup per point.
+- **`set_radius`:** one grid query per cafe, then work linear in the points inside R.
+- **`evaluate`:** linear in passes.
+
+With the current data, every step feels instant in the browser.
+
+## 6. WebAssembly interface (`api.cpp`)
+
+Every call returns either a number or a pointer into a buffer owned by `api.cpp`. The page
+wraps each pointer in a fresh typed-array view (`HEAPF64`, `HEAPF32`, `HEAP32`) **after every
+call**. Memory growth replaces the heap buffer, so a view kept from earlier can go stale.
+Strings are read with `UTF8ToString`.
+
+| Function | Returns |
+|---|---|
+| `ct_init()` | 0 on success. On failure, read the message with `ct_error()` |
+| `ct_flags()` | Dataset flags (bit 0 = public) |
+| `ct_run_count`, `ct_run_years`, `ct_run_ids` | Runs: i32 year[], f64 activity id[] |
+| `ct_point_count`, `ct_points` | f32 [lat, lon] × points (drawing only) |
+| `ct_part_count`, `ct_part_start`, `ct_part_run` | i32 offsets (n_parts + 1) and i32 run index per part |
+| `ct_cafe_count`, `ct_cafe_latlon`, `ct_cafe_osm`, `ct_cafe_name(i)` | f64 [lat, lon] × cafes, f64 OSM id, name |
+| `ct_street_name(i)` | Street name for a name id |
+| `ct_set_radius(R)` | Re-cuts passes (§5.3) |
+| `ct_evaluate(tol, band, acceptance, year_mask)` | f64 × 7 per cafe: runs, status, ⌖ yield, ⌒ yield, combined yield, best Ø, median Ø |
+| `ct_detail(i)` | Number of passes. Fills the detail buffers using the settings of the last `ct_evaluate` |
+| `ct_detail_passes` | f64 × 9 per pass: run, name id, start, end (point indices), d, q_lat, q_lon, prof, mean offset |
+| `ct_detail_part_count`, `ct_detail_parts` | f64 × 5 per run: run, d, prof, ⌖ ok, ⌒ ok |
+| `ct_detail_feature_count`, `ct_detail_features` | f64 × 9 per street: name id, passes, ⌖, ⌒, both, p95, bias, nx, ny |
+| `ct_detail_line_*`, `ct_detail_band_*` | Polylines and polygons: i32 offsets (count + 1), then f32 [lat, lon] pairs |
+
+When adding a function, mark it `EMSCRIPTEN_KEEPALIVE`, add it to the export list in
+`build.sh`, and document its buffer layout here.
+
+## 7. The page (`cafes.html`)
+
+- **Engine start-up:** `await CafeTol()` → `ct_init` → copy the static arrays (points, parts, cafes) → `ct_set_radius(75)` → `ct_evaluate`.
+- **Map layers:**
+  - Esri dark-gray base and reference tiles. OSM tiles are blocked from `file://`, and CartoDB needs a key.
+  - The **glow layer**, a custom `L.Layer` drawing to its own canvas. It strokes every run part with `globalCompositeOperation = "lighter"`, so overlapping runs brighten the way the route heatmap does. It is redrawn on `moveend`/`zoomend` and when the year filter changes.
+  - **Cafe pins:** canvas `circleMarker`s coloured by status. In "Conform to both" mode, the other pins are hidden.
+  - **Selection overlay:** the R circle, the band polygons and nominals (dashed chain lines), the passes (green when the run is accepted, red otherwise), closest-approach dots and the Ø zone circle.
+- **What each control calls:**
+
+| Control | Engine calls |
+|---|---|
+| R slider | `ct_set_radius`, then `ct_evaluate` and `ct_detail` |
+| Ø, band and acceptance sliders | `ct_evaluate`, then `ct_detail` |
+| Year chips | `ct_evaluate` and `ct_detail`, plus a glow redraw |
+| Search, "All / Conform to both" | none: the JS only filters the table and pins |
+| Selecting a cafe | `ct_detail` |
+
+- **URL hash:** `#cafe=<osm id>&show=both` selects a cafe and the filter on load, and the hash is updated on every selection. Use it to share a view or take screenshots.
+
+## 8. GD&T model
+
+| GD&T concept | Implementation |
+|---|---|
+| Drawing / nominal | City of Toronto street centreline piece |
+| Datum A, basic dimension | Cafe position (OSM), exact |
+| Feature | A street (by name) near the cafe |
+| Part / lot | One run / all runs within R of the cafe |
+| ⌖ true position | Ø = 2 × closest approach of the run. Conforms if Ø ≤ Ø_tol |
+| ⌒ profile of a line, equally disposed | 2 × max \|offset\| from the centreline, the run's worst pass. Conforms if ≤ band |
+| Accepted part | Meets both callouts |
+| Lot acceptance | Combined yield ≥ acceptance level, with ≥ 3 runs |
+| Unequal disposition | Reported as **bias** (mean signed offset), not toleranced |
+
+| Setting | Default | Range | Fixed constants |
+|---|---|---|---|
+| Search radius R | 75 m | 40–300 m | Match distance 25 m · heading 35° |
+| Position zone Ø | 50 m | 10–200 m | Blip length 4 points · stray search 300 m |
+| Profile band | 30 m | 10–60 m | Minimum runs 3 · minimum pass points 3 |
+| Acceptance yield | 75% | 50–100% | Track gap 50 m · R_MAX 300 m |
+
+## 9. Privacy architecture
+
+Two builds come from the same code:
+
+| | Private (`cafes`) | Public (`cafes --public`, `publish`) |
+|---|---|---|
+| Tracks | Full | 500 m start/finish trim. Every point inside a privacy zone is removed |
+| Cafes | All within 300 m of a run | Also drops cafes within (shifted zone radius + 300 m) and forbidden names |
+| Streets | All near kept cafes | Also drops pieces touching a shifted zone and forbidden names |
+| Output | `output/cafe_tolerance.html` | `docs/index.html` (reviewed and committed by hand) |
+| Check | none | `privacy.check` must pass, or the files are deleted |
+
+**Privacy zones.** These are density clusters of run start and finish points. Each zone's
+radius is the 95th-percentile spread + 300 m, with a 600 m minimum. Its published centre is
+shifted at random by up to 200 m, and the shift is stored in `data/privacy.json` so the same
+place keeps the same shift across builds.
+
+**The check scans two places.** The GPS data sits inside base64-encoded WebAssembly, where a
+text scan of the HTML can't see it. `privacy.check` therefore looks in both:
+
+1. **Page text:** every `[lat, lon]` pair, and every forbidden word.
+2. **Every embedded wasm module:**
+   1. Find each base64 run starting `AGFzbQ` (that's `\0asm`) and decode it.
+   2. Rebuild the module's initial linear memory from its data section (`cafe_blob.wasm_memory_image`). The optimiser may split a static array into several segments, so the raw file can't simply be searched.
+   3. Find every `CAFETOL1` with a version-1 header. The decoder's own magic constant is also in memory, so it gets skipped.
+   4. Decode each dataset and zone-test **every run point, street point and cafe** against the *real* centres, shrunk by the maximum shift.
+   5. Scan all cafe and street names for forbidden words.
+
+   **A wasm module without a readable dataset fails the check.** Anything published must be scannable.
+
+The forbidden names are the 5 neighbourhoods with the most runs (`privacy.forbidden_names`).
+
+## 10. Design decisions
+
+| Decision | Why |
+|---|---|
+| **Runs are never merged** | Averaging runs into one line would hide the very spread the profile callout measures. Each run is a part, inspected against the same drawing |
+| **The nominal comes from the City centreline** | In GD&T the nominal is design intent. It's never averaged from the parts measured against it. The centreline also gives each street a stable identity |
+| **A feature is a street name, not a centreline piece** | Pieces end at every intersection. Grouping by piece would cut one run along one street into a new pass at every block |
+| **Matching checks heading** | Near an intersection the nearest centreline is often the cross street. The 35° heading check, ignoring direction, keeps a run on the street it is actually following |
+| **A part is a run** (min d, max prof) | A run that turns a corner near a cafe produces two passes. Counting both would double-count one run |
+| **Strays count against the pass's street** | Dropping unmatched points would hide exactly the deviations the profile should catch, such as crossing the road to the door |
+| **The dataset is compiled into the wasm** | This was a requirement. It also makes the page a single file with no data fetches |
+| **`-sSINGLE_FILE`** | Browsers block `fetch()` of a separate `.wasm` file from `file://` |
+| **Passes are cut once per R, scored many times** | Only R changes which points belong to which pass. Tolerance, band, acceptance and year sliders only re-score |
+| **Toolchain in pinned Docker** | No local compiler or Node is needed, and builds are reproducible. Tests run under the node in the image |
+| **Chains are excluded at export** | Keeps the analysis on independent cafes. Matching both name and OSM `brand` catches renamed franchise stores |
+
+## 11. Limitations
+
+- **Street identity is by name.** Two different streets with the same name inside one R would be treated as one feature. Unnamed trails and paths aren't in the centreline classes, so runs on them stay unmatched and are measured against the nearest named street.
+- **Sidewalk bias.** Centrelines run down the middle of the road, so runs carry a built-in offset of roughly half the road's width. The default band (30 m) allows for it, and the bias column reports it. A wide arterial can still fail a narrow band without the run being loose.
+- **Fixed projection and year range.** The projection is tuned to Toronto, and the year mask covers 2000–2031.
+- **Data freshness.** OSM data quality and the cache date limit what the cafe list can be: closed or mis-tagged cafes stay until `--refresh-cafes`, and some chains have no `brand` tag and are caught only by name.
+- **Precision.** Page coordinates are float32 (~0.5 m), which is fine for drawing. All measurements are made in double precision in the engine.
+
+## 12. Extending
+
+| To change… | Edit |
+|---|---|
+| Which places count as cafes | `exclusions.py`. Afterwards, audit the excluded names for false positives |
+| Matching thresholds | the constants in `match.hpp`. Add a test in `tests/test_gdt.cpp` |
+| A tolerance definition or status rule | `gdt.cpp` (`measure`, `parts_of`, `classify`), plus `cafes.html`, README.md and §8 above |
+| Engine outputs | `api.cpp`, the export list in `build.sh`, the readers in `cafes.html`, and §6 above |
+| The dataset format | `cafe_blob.py`, `dataset.{hpp,cpp}`, `VERSION` in both, and §4 above |
+| The public scrub | `cafes.export` and `privacy.py`. Never loosen `privacy.check`; fix the cause instead |
