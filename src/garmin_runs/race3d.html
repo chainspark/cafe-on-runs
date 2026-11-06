@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__ 3D</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<style>
+  :root { --bg:#07080c; --panel:#11131a; --fg:#e8e9ee; --muted:#8a8f9e; --accent:#f26b3a; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-family:Inter,system-ui,sans-serif; }
+  body { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:12px 16px; }
+  #stage { position:relative; width:min(100%, calc((100vh - 84px) * 16 / 9)); aspect-ratio:16/9; border-radius:12px; overflow:hidden; background:#0d1017; box-shadow:0 20px 60px rgba(0,0,0,.6); }
+  #map, #hud { position:absolute; inset:0; width:100%; height:100%; }
+  #hud { pointer-events:none; }
+  .bar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; width:min(100%, calc((100vh - 84px) * 16 / 9)); }
+  button, select { background:var(--panel); color:var(--fg); border:1px solid #262a35; border-radius:8px; padding:7px 11px; font:500 13px Inter,sans-serif; cursor:pointer; }
+  button:hover, select:hover { border-color:#3a4050; }
+  button:disabled, select:disabled { opacity:.5; cursor:default; }
+  input[type=range] { flex:1; min-width:120px; accent-color:var(--accent); }
+  .rec { color:#ff6b6b; }
+  .back { color:var(--muted); font:500 13px Inter,sans-serif; text-decoration:none; padding:7px 4px; }
+  .back:hover { color:var(--fg); }
+  .maplibregl-ctrl-attrib { font-size:10px; }
+</style>
+</head>
+<body>
+<div id="stage"><div id="map"></div><canvas id="hud"></canvas></div>
+<div class="bar">
+  <button id="play">Pause</button>
+  <button id="restart">Restart</button>
+  <input id="scrub" type="range" min="0" max="1000" value="0" aria-label="Timeline">
+  <select id="cam" aria-label="Camera">
+    <option value="overview" selected>High overview</option>
+    <option value="runner">Runner's eye</option>
+    <option value="drone">Drone chase</option>
+  </select>
+  <select id="len" aria-label="Length">
+    <option value="90">1.5 min</option>
+    <option value="180" selected>3 min</option>
+    <option value="360">6 min</option>
+  </select>
+  <button id="rec">Save video</button>
+  <a class="back" href="report.html">← Running report</a>
+</div>
+<script>
+const D = /*__DATA__*/null;
+const N = D.t.length, DMAX = D.d[N - 1], PI = Math.PI;
+const KX = Math.cos(D.lat[0] * PI / 180) * 111320, KY = 110540;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+// ---------- route lookups ----------
+function at(s) {
+  let lo = 0, hi = N - 1;
+  while (lo < hi) { const m = (lo + hi + 1) >> 1; if (D.d[m] <= s) lo = m; else hi = m - 1; }
+  const j = Math.min(N - 1, lo + 1);
+  return { i: lo, j, f: D.d[j] > D.d[lo] ? clamp((s - D.d[lo]) / (D.d[j] - D.d[lo]), 0, 1) : 0 };
+}
+const lerp = (arr, p) => arr[p.i] + (arr[p.j] - arr[p.i]) * p.f;
+const camPt = s => { const p = at(clamp(s, 0, DMAX)); return [lerp(D.slon, p), lerp(D.slat, p)]; };
+const runPt = s => { const p = at(clamp(s, 0, DMAX)); return [lerp(D.lon, p), lerp(D.lat, p)]; };
+const offset = ([lon, lat], brg, m) => [lon + Math.sin(brg * PI / 180) * m / KX, lat + Math.cos(brg * PI / 180) * m / KY];
+const bearingTo = (a, b) => Math.atan2((b[0] - a[0]) * KX, (b[1] - a[1]) * KY) * 180 / PI;
+const angDiff = (a, b) => ((b - a + 540) % 360) - 180;
+
+// ---------- pace colours ----------
+const STOPS = [[0, [90, 79, 207]], [0.35, [196, 60, 142]], [0.68, [242, 107, 58]], [1, [253, 224, 71]]];
+const sorted = [...D.pace].sort((a, b) => a - b);
+const P_FAST = sorted[Math.floor(N * 0.08)], P_SLOW = sorted[Math.floor(N * 0.85)];
+function paceRGB(p) {
+  const u = clamp((P_SLOW - p) / (P_SLOW - P_FAST), 0, 1);
+  for (let i = 1; i < STOPS.length; i++) if (u <= STOPS[i][0]) {
+    const [u0, a] = STOPS[i - 1], [u1, b] = STOPS[i], k = (u - u0) / (u1 - u0);
+    return a.map((v, q) => Math.round(v + (b[q] - v) * k));
+  }
+  return STOPS[3][1];
+}
+const COL = D.pace.map(paceRGB);
+const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+const GRAD_IDX = []; for (let i = 0, next = 0; i < N; i++) if (D.d[i] >= next) { GRAD_IDX.push(i); next = D.d[i] + 150; }
+function gradient(pHead, cHead) {
+  const e = ['interpolate', ['linear'], ['line-progress']]; let last = -1;
+  for (const i of GRAD_IDX) { const q = D.prog[i]; if (q >= pHead - 1e-6) break; if (q > last + 1e-7) { e.push(q, rgb(COL[i])); last = q; } }
+  if (pHead > last + 1e-7 && pHead > 0) { e.push(pHead, rgb(cHead)); last = pHead; }
+  const off = Math.max(0, last) + 1e-5;
+  if (last < 0) e.push(0, 'rgba(0,0,0,0)', 1, 'rgba(0,0,0,0)');
+  else { if (off < 1) e.push(off, 'rgba(0,0,0,0)'); if (off < 0.99999) e.push(1, 'rgba(0,0,0,0)'); }
+  return e;
+}
+
+// ---------- formatting ----------
+const hms = s => { s = Math.round(s); return `${Math.floor(s / 3600)}:${String(Math.floor(s % 3600 / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
+const mmss = s => { s = Math.round(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const START = new Date(D.start.replace(' ', 'T'));
+const clock = s => new Date(START.getTime() + s * 1000).toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit', hour12: true }).replace(/\./g, '').toUpperCase();
+
+// ---------- map ----------
+const routeGeo = { type: 'Feature', geometry: { type: 'LineString', coordinates: D.lon.map((x, i) => [x, D.lat[i]]) } };
+const pointGeo = c => ({ type: 'Feature', geometry: { type: 'Point', coordinates: c } });
+const W2 = (a, b, c) => ['interpolate', ['exponential', 2], ['zoom'], 13, a, 16, b, 22, c];
+const STYLE = {
+  version: 8,
+  sources: {
+    omt: { type: 'vector', url: 'https://tiles.openfreemap.org/planet' },
+    route: { type: 'geojson', data: routeGeo, lineMetrics: true },
+    runner: { type: 'geojson', data: pointGeo([D.lon[0], D.lat[0]]) },
+  },
+  sky: { 'sky-color': '#0c1324', 'horizon-color': '#3b3552', 'fog-color': '#0d1017', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.7, 'fog-ground-blend': 0.75, 'atmosphere-blend': 0.6 },
+  light: { anchor: 'map', color: '#ffffff', intensity: 0.55, position: [1.4, 120, 35] },
+  layers: [
+    { id: 'bg', type: 'background', paint: { 'background-color': '#0f131b' } },
+    { id: 'landcover', type: 'fill', source: 'omt', 'source-layer': 'landcover', filter: ['in', ['get', 'class'], ['literal', ['grass', 'wood']]], paint: { 'fill-color': '#12201a' } },
+    { id: 'park', type: 'fill', source: 'omt', 'source-layer': 'park', paint: { 'fill-color': '#13231b' } },
+    { id: 'water', type: 'fill', source: 'omt', 'source-layer': 'water', paint: { 'fill-color': '#0a1729' } },
+    { id: 'roads-minor', type: 'line', source: 'omt', 'source-layer': 'transportation', filter: ['in', ['get', 'class'], ['literal', ['minor', 'service', 'path', 'track']]],
+      layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#1e2430', 'line-width': W2(0.6, 4, 260) } },
+    { id: 'roads-major', type: 'line', source: 'omt', 'source-layer': 'transportation', filter: ['in', ['get', 'class'], ['literal', ['primary', 'secondary', 'tertiary', 'trunk', 'motorway']]],
+      layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#283041', 'line-width': W2(1.6, 9, 560) } },
+    { id: 'route-ghost', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': 'rgba(255,255,255,0.16)', 'line-width': W2(2, 3, 192) } },
+    { id: 'route-glow', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-gradient': gradient(0), 'line-width': W2(9, 14, 560), 'line-blur': W2(6, 10, 400), 'line-opacity': 0.55 } },
+    { id: 'route-line', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-gradient': gradient(0), 'line-width': W2(3, 4.5, 200) } },
+    { id: 'buildings', type: 'fill-extrusion', source: 'omt', 'source-layer': 'building', minzoom: 13,
+      paint: { 'fill-extrusion-color': ['interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 8], 0, '#262d40', 40, '#323b55', 150, '#45537a', 300, '#5a6b98'],
+               'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 8], 'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+               'fill-extrusion-opacity': 0.94, 'fill-extrusion-vertical-gradient': true } },
+    { id: 'runner-halo', type: 'circle', source: 'runner', paint: { 'circle-radius': 22, 'circle-color': '#fde047', 'circle-opacity': 0.35, 'circle-blur': 1 } },
+    { id: 'runner-dot', type: 'circle', source: 'runner', paint: { 'circle-radius': 6, 'circle-color': '#ffffff', 'circle-stroke-width': 2, 'circle-stroke-color': '#fde047' } },
+  ],
+};
+const map = new maplibregl.Map({
+  container: 'map', style: STYLE, center: [D.lon[0], D.lat[0]], zoom: 12, pitch: 60, maxPitch: 85, maxZoom: 23,
+  interactive: false, preserveDrawingBuffer: true, fadeDuration: 0, attributionControl: { compact: true },
+});
+
+// ---------- camera ----------
+const MODES = {
+  runner:   { alt: 14,   back: 70,   look: 130 },
+  drone:    { alt: 110,  back: 260,  look: 200 },
+  overview: { alt: 1400, back: 1600, look: 300 },
+};
+const INTRO_P = { alt: 5500, back: 2500, look: 6000 }, FINALE_P = { alt: 1800, back: 2600, look: 0 };
+const INTRO = 3.5, OUTRO = 7;
+let RUN = 180, mode = 'overview';
+let cur = { ...INTRO_P }, brg = bearingTo(camPt(0), camPt(2500));
+const TOTAL = () => INTRO + RUN + OUTRO;
+const distAt = pos => clamp((pos - INTRO) / RUN, 0, 1) * DMAX;
+
+let lastS = 0;
+function updateCamera(pos, dt, snap) {
+  const s = distAt(pos), target = pos < INTRO * 0.25 ? INTRO_P : pos > INTRO + RUN ? FINALE_P : MODES[mode];
+  const jump = Math.abs(s - lastS) > 400; lastS = s;
+  const k = snap || jump ? 1 : 1 - Math.exp(-dt / 0.9);
+  cur.alt = Math.exp(Math.log(cur.alt) + (Math.log(target.alt) - Math.log(cur.alt)) * k);
+  cur.back += (target.back - cur.back) * k; cur.look += (target.look - cur.look) * k;
+  const anchor = camPt(s);
+  let want = bearingTo(camPt(s - 30), camPt(s + Math.min(cur.look, 400) * 0.6 + 40));
+  if (pos > INTRO + RUN) want = brg + 10 * dt;        // slow orbit at the finish
+  brg = (snap || jump) ? want : brg + angDiff(brg, want) * (1 - Math.exp(-dt / 0.7));
+  const from = offset(anchor, brg + 180, cur.back), to = offset(anchor, brg, cur.look);
+  const o = map.calculateCameraOptionsFromTo(new maplibregl.LngLat(...from), cur.alt, new maplibregl.LngLat(...to), 0);
+  map.jumpTo(o);
+}
+
+// ---------- HUD ----------
+const hud = document.getElementById('hud'), h = hud.getContext('2d');
+const LW = 1280, LH = 720;
+function sizeHud() { const r = hud.getBoundingClientRect(), dpr = window.devicePixelRatio || 1; hud.width = Math.round(r.width * dpr); hud.height = Math.round(r.height * dpr); }
+sizeHud(); addEventListener('resize', sizeHud);
+// minimap projection
+const MM = { x: LW - 32 - 190, y: 32 + 60, w: 190, h: 250 };
+const mx0 = Math.min(...D.lon), mx1 = Math.max(...D.lon), my0 = Math.min(...D.lat), my1 = Math.max(...D.lat);
+const msc = Math.min((MM.w - 24) / ((mx1 - mx0) * KX), (MM.h - 24) / ((my1 - my0) * KY));
+const mmx = lon => MM.x + MM.w / 2 + (lon - (mx0 + mx1) / 2) * KX * msc, mmy = lat => MM.y + MM.h / 2 - (lat - (my0 + my1) / 2) * KY * msc;
+function text(t, x, y, font, color, align = 'left', spacing = 0) { h.font = font; h.fillStyle = color; h.textAlign = align; h.letterSpacing = spacing + 'px'; h.fillText(t, x, y); h.letterSpacing = '0px'; }
+
+function drawHud(pos, now) {
+  const sc = hud.width / LW; h.setTransform(sc, 0, 0, sc, 0, 0); h.clearRect(0, 0, LW, LH);
+  const s = distAt(pos), p = at(s), i = p.i, T = lerp(D.t, p);
+  const fin = clamp((pos - INTRO - RUN) / 1.2, 0, 1), intro = clamp(pos / 1.2, 0, 1);
+  h.globalAlpha = intro;
+  // top and bottom scrims
+  let g = h.createLinearGradient(0, 0, 0, 120); g.addColorStop(0, 'rgba(7,8,12,0.75)'); g.addColorStop(1, 'rgba(7,8,12,0)'); h.fillStyle = g; h.fillRect(0, 0, LW, 120);
+  g = h.createLinearGradient(0, LH - 150, 0, LH); g.addColorStop(0, 'rgba(7,8,12,0)'); g.addColorStop(1, 'rgba(7,8,12,0.85)'); h.fillStyle = g; h.fillRect(0, LH - 150, LW, 150);
+  text(D.eyebrow.toUpperCase(), 32, 44, '600 12px Inter', '#f26b3a', 'left', 1.8);
+  text(D.title, 32, 82, '600 40px "Barlow Condensed"', '#ffffff');
+  text(fin < 0.5 ? 'TIME OF DAY' : 'DATE', LW - 32, 44, '600 12px Inter', '#aab0bf', 'right', 1.8);
+  text(fin < 0.5 ? clock(T) : START.toLocaleDateString('en-CA', { day: 'numeric', month: 'short', year: 'numeric' }), LW - 32, 82, '600 40px "Barlow Condensed"', '#ffffff', 'right');
+
+  // stats
+  const avgPace = D.elapsed / (D.distance / 1000);
+  const stats = fin < 0.5
+    ? [['DISTANCE', (s / 1000).toFixed(2), 'km'], ['TIME', hms(T), ''], ['PACE', mmss(D.pace[i]), '/km'], ['HEART RATE', String(D.hr[i]), 'bpm']]
+    : [['DISTANCE', (D.distance / 1000).toFixed(2), 'km'], ['FINISH TIME', hms(D.elapsed), ''], ['AVG PACE', mmss(avgPace), '/km'], ['AVG HR', String(Math.round(D.avgHR)), 'bpm']];
+  stats.forEach(([l, v, u], k) => {
+    const x = 32 + k * 190;
+    text(l, x, LH - 82, '600 11px Inter', '#aab0bf', 'left', 1.6);
+    const c = k === 2 ? rgb(fin < 0.5 ? COL[i] : paceRGB(avgPace)) : '#ffffff';
+    text(v, x, LH - 34, '600 50px "Barlow Condensed"', c);
+    h.font = '600 50px "Barlow Condensed"'; const vw = h.measureText(v).width;
+    if (u) text(u, x + vw + 5, LH - 34, '500 14px Inter', '#aab0bf');
+    if (k === 3 && fin < 0.5) {
+      const ph = (now / 1000 * D.hr[i] / 60) % 1, z = 1 + 0.25 * Math.exp(-ph * 9);
+      h.save(); h.translate(x + 112, LH - 87); h.scale(z * 0.8, z * 0.8); h.fillStyle = '#ff5a6e';
+      h.beginPath(); h.moveTo(0, 6); h.bezierCurveTo(-12, -2, -6, -12, 0, -5); h.bezierCurveTo(6, -12, 12, -2, 0, 6); h.fill(); h.restore();
+    }
+  });
+
+  // minimap
+  h.fillStyle = 'rgba(10,12,18,0.62)'; h.beginPath(); h.roundRect(MM.x, MM.y, MM.w, MM.h, 10); h.fill();
+  h.lineCap = 'round'; h.lineJoin = 'round';
+  h.strokeStyle = 'rgba(255,255,255,0.18)'; h.lineWidth = 2; h.beginPath();
+  for (let q = 0; q < N; q += 3) (q ? h.lineTo : h.moveTo).call(h, mmx(D.lon[q]), mmy(D.lat[q])); h.stroke();
+  h.lineWidth = 2.6;
+  for (let q = 3; q <= i; q += 3) { h.strokeStyle = rgb(COL[q]); h.beginPath(); h.moveTo(mmx(D.lon[q - 3]), mmy(D.lat[q - 3])); h.lineTo(mmx(D.lon[q]), mmy(D.lat[q])); h.stroke(); }
+  const rp = runPt(s);
+  h.fillStyle = '#fff'; h.beginPath(); h.arc(mmx(rp[0]), mmy(rp[1]), 4, 0, 7); h.fill();
+  // view direction wedge
+  h.fillStyle = 'rgba(255,255,255,0.18)'; h.beginPath(); h.moveTo(mmx(rp[0]), mmy(rp[1]));
+  const b = (brg - 90) * PI / 180; h.arc(mmx(rp[0]), mmy(rp[1]), 22, b - 0.35, b + 0.35); h.closePath(); h.fill();
+  text('OSM BUILDINGS · OPENFREEMAP', MM.x + MM.w, MM.y + MM.h + 16, '500 9px Inter', 'rgba(170,176,191,0.7)', 'right', 1);
+
+  // distance progress bar
+  h.fillStyle = 'rgba(255,255,255,0.12)'; h.fillRect(32, LH - 14, LW - 64, 3);
+  h.fillStyle = rgb(COL[i]); h.fillRect(32, LH - 14, (LW - 64) * s / DMAX, 3);
+
+  if (fin > 0) {
+    h.globalAlpha = fin;
+    text('FINISHED', LW / 2, LH / 2 - 70, '600 14px Inter', '#f26b3a', 'center', 2.4);
+    text(hms(D.elapsed), LW / 2, LH / 2 + 10, '600 104px "Barlow Condensed"', '#ffffff', 'center');
+    text(`${(D.distance / 1000).toFixed(2)} KM · ${mmss(avgPace)} /KM AVG`, LW / 2, LH / 2 + 46, '600 14px Inter', '#d0d4de', 'center', 1.8);
+  }
+  h.globalAlpha = 1;
+  if (params.has('debug')) {
+    const st = map.style, srcs = st && st.sourceCaches ? Object.entries(st.sourceCaches).map(([k, c]) => `${k}:${Object.keys(c._tiles).length}t/${c.loaded()}`).join(' ') : 'n/a';
+    text(`styleLoaded=${map.isStyleLoaded()} layer=${!!map.getLayer('route-line')} tiles=${map.areTilesLoaded()} ${srcs} zoom=${map.getZoom().toFixed(2)} pitch=${map.getPitch().toFixed(1)} err=${lastErr}`, 32, 140, '500 12px Inter', '#ff0', 'left');
+  }
+}
+let lastErr = '';
+
+// ---------- playback ----------
+const $ = id => document.getElementById(id);
+const params = new URLSearchParams(location.hash.slice(1));
+let pos = 0, playing = true, last = null, recorder = null, freeze = false;
+if (params.get('cam')) { mode = params.get('cam'); $('cam').value = mode; }
+if (params.has('km')) { pos = INTRO + clamp(parseFloat(params.get('km')) * 1000 / DMAX, 0, 1) * RUN; playing = false; freeze = true; }
+if (params.has('pos')) { pos = parseFloat(params.get('pos')); playing = false; freeze = true; }
+function setPlaying(p) { playing = p; $('play').textContent = p ? 'Pause' : 'Play'; }
+setPlaying(playing);
+function restart() { pos = 0; cur = { ...INTRO_P }; brg = bearingTo(camPt(0), camPt(2500)); lastS = 0; setPlaying(true); }
+
+let lastProg = -1, settle = 0;   // settle: keep easing the camera ~1.5 s after a pause/scrub
+function frame(now) {
+  const dt = last === null ? 0 : Math.min(0.1, (now - last) / 1000); last = now;
+  if (playing) { pos += dt; if (pos >= TOTAL()) { pos = TOTAL(); setPlaying(false); if (recorder) recorder.stop(); } }
+  const s = distAt(pos), p = at(s);
+  const camKey = `${pos}|${mode}|${RUN}`;
+  if (playing || camKey !== frame.key || settle > 0) { updateCamera(pos, dt, freeze); settle = playing || camKey !== frame.key ? 90 : settle - 1; frame.key = camKey; }
+  const prog = lerp(D.prog, p);
+  if (Math.abs(prog - lastProg) > 1e-6 && map.getLayer('route-line')) try {
+    const c = COL[p.i];
+    const gr = gradient(pos > INTRO ? prog : 0, c);
+    map.setPaintProperty('route-line', 'line-gradient', gr);
+    map.setPaintProperty('route-glow', 'line-gradient', gr);
+    map.setPaintProperty('runner-halo', 'circle-color', rgb(c));
+    map.setPaintProperty('runner-dot', 'circle-stroke-color', rgb(c));
+    map.getSource('runner').setData(pointGeo(runPt(s)));
+    lastProg = prog;
+  } catch (e) { lastErr = 'route: ' + e.message; }
+  drawHud(pos, now);
+  $('scrub').value = Math.round(pos / TOTAL() * 1000);
+  requestAnimationFrame(frame);
+}
+
+$('play').onclick = () => { freeze = false; if (!playing && pos >= TOTAL()) restart(); else setPlaying(!playing); };
+$('restart').onclick = () => { freeze = false; restart(); };
+$('scrub').oninput = () => { pos = $('scrub').value / 1000 * TOTAL(); };
+$('cam').onchange = () => { mode = $('cam').value; };
+$('len').onchange = () => { const s = distAt(pos); RUN = +$('len').value; if (pos > INTRO) pos = INTRO + s / DMAX * RUN; };
+addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); $('play').click(); } });
+
+// recording: composite the WebGL map + HUD into one canvas
+const comp = document.createElement('canvas'), cctx = comp.getContext('2d');
+map.on('render', () => {
+  if (!recorder) return;
+  const mc = map.getCanvas();
+  if (comp.width !== mc.width) { comp.width = mc.width; comp.height = mc.height; }
+  cctx.drawImage(mc, 0, 0); cctx.drawImage(hud, 0, 0, comp.width, comp.height);
+});
+$('rec').onclick = () => {
+  if (recorder || !window.MediaRecorder) return;
+  const mc = map.getCanvas(); comp.width = mc.width; comp.height = mc.height;
+  const type = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'].find(t => MediaRecorder.isTypeSupported(t));
+  const chunks = [];
+  recorder = new MediaRecorder(comp.captureStream(30), { mimeType: type, videoBitsPerSecond: 16e6 });
+  recorder.ondataavailable = e => e.data.size && chunks.push(e.data);
+  recorder.onstop = () => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(chunks, { type }));
+    a.download = `${D.slug}-3d-${mode}.` + (type.includes('mp4') ? 'mp4' : 'webm'); a.click();
+    recorder = null; $('rec').textContent = 'Save video'; $('rec').classList.remove('rec');
+    for (const id of ['scrub', 'play', 'cam', 'len', 'restart']) $(id).disabled = false;
+  };
+  freeze = false; restart();
+  for (const id of ['scrub', 'play', 'cam', 'len', 'restart']) $(id).disabled = true;
+  $('rec').textContent = '● Recording…'; $('rec').classList.add('rec');
+  recorder.start();
+};
+
+map.on('error', e => { lastErr = (e.error && e.error.message) || String(e); console.warn('map error:', lastErr); });
+map.on('styledata', () => { lastProg = -1; });
+document.fonts.ready.then(() => requestAnimationFrame(frame));
+</script>
+</body>
+</html>

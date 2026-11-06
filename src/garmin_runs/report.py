@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from . import race3d
 from .analyze import fmt_dur, fmt_pace, summarize
 
 OUT = Path("output")
@@ -119,7 +120,8 @@ def build(out_dir: Path = OUT, public: bool = False) -> Path:
     page = TEMPLATE.replace("__TILES__", tiles).replace("__BEST__", best_html) \
         .replace("__YEARLY__", yearly_html).replace("__RECENT__", recent_html) \
         .replace("__NEIGHBOURHOOD_CARD__", "" if public else NEIGHBOURHOOD_CARD).replace("__HOODS__", hoods_html) \
-        .replace("__DATA__", json.dumps(data))
+        .replace("__DATA__", json.dumps(data)) \
+        .replace("__RACE_LINKS__", race3d.nav_links(out_dir))
     if public:
         page = page.replace('<a href="neighbourhood.html">Favourite neighbourhood →</a>', "")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -173,7 +175,7 @@ td{border-bottom:1px solid var(--grid);padding:6px 8px}
 </style></head>
 <body><main>
 <header><div><h1>Running Report</h1><div class="muted">From Garmin Connect, via the Personal API</div></div>
-<nav class="pages"><a href="heatmap.html">Route heatmap →</a><a href="segment.html">Most-run segments →</a><a href="neighbourhood.html">Favourite neighbourhood →</a></nav></header>
+<nav class="pages"><a href="heatmap.html">Route heatmap →</a><a href="segment.html">Most-run segments →</a>__RACE_LINKS__<a href="neighbourhood.html">Favourite neighbourhood →</a></nav></header>
 
 <section class="tiles">__TILES__</section>
 
