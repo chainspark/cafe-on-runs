@@ -100,6 +100,7 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
 .leaflet-container { font: 12px var(--f-body) }
 .leaflet-tooltip.cafe-tip { font: 600 11px var(--f-mono); background: #1c2026; color: #e6ebf0; border: 1px solid #3a424d; box-shadow: none }
 .leaflet-tooltip.cafe-tip::before { display: none }
+.leaflet-tooltip.cafe-tip.label { padding: 1px 5px; font-size: 10.5px; background: rgba(28,32,38,.82); border-color: transparent }
 </style>
 </head>
 <body>
@@ -251,11 +252,17 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
 
   const lls = []; for (let i = 0; i < nCafes; i++) lls.push([cafeLL[2 * i], cafeLL[2 * i + 1]]);
   map.fitBounds(L.latLngBounds(lls).pad(0.05));
-  const pinRenderer = L.canvas({ padding: 0.3 });
+  // Pins get their own pane above the selection overlay: stacked Leaflet canvases don't pass
+  // mouse events down, so pins drawn under the overlay canvas could never be clicked.
+  map.createPane("pins").style.zIndex = 620;
+  const pinRenderer = L.canvas({ pane: "pins", padding: 0.3, tolerance: 6 });
+  const LABEL_ZOOM = 16;  // from this zoom in, every shown cafe is labelled with its name
   const pins = lls.map((ll, i) => L.circleMarker(ll, { renderer: pinRenderer, radius: 5, weight: 1.5, color: "#e6ebf0", fillOpacity: 1 })
     .bindTooltip(esc(cafeName[i]), { className: "cafe-tip", direction: "top", offset: [0, -6] })
     .on("click", () => select(i, false)));
   const overlay = L.layerGroup().addTo(map);
+  let labelled = null;
+  map.on("zoomend", () => { const on = map.getZoom() >= LABEL_ZOOM; if (on !== labelled) { labelled = on; drawPins(); } });
 
   // ---------- engine calls ----------
   function evaluate() {
@@ -297,9 +304,10 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
       pin.setStyle({ fillColor: css(STATUS[r.status].color), radius: r.i === state.sel ? 8 : (r.status === 5 ? 3.5 : 5.5),
         weight: r.i === state.sel ? 2.5 : 1.2 });
       if (!map.hasLayer(pin)) pin.addTo(map);
-      const permanent = state.show === "both" && both <= 40;
+      const permanent = map.getZoom() >= LABEL_ZOOM || (state.show === "both" && both <= 40);
       if (pin.getTooltip().options.permanent !== permanent) {
-        pin.unbindTooltip().bindTooltip(esc(cafeName[r.i]), { className: "cafe-tip", direction: "top", offset: [0, -6], permanent });
+        pin.unbindTooltip().bindTooltip(esc(cafeName[r.i]), { className: "cafe-tip" + (permanent ? " label" : ""),
+          direction: permanent ? "right" : "top", offset: permanent ? [7, 0] : [0, -6], permanent });
       }
     });
   }
