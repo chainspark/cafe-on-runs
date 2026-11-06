@@ -66,11 +66,16 @@ def _swatch(css_background: str) -> str:
             f'background:{css_background};vertical-align:middle;margin:0 6px 2px 0"></span>')
 
 
-def build(trim_meters: float = 0) -> Path:
+def build(trim_meters: float = 0, out_dir: Path = OUT, public: bool = False) -> Path:
+    """public=True: start/finish trimmed and privacy zones removed (see privacy.py)."""
     tracks = pd.read_parquet(TRACKS)
     runs = load_runs().set_index("activity_id")
     tracks = tracks[tracks["activity_id"].isin(runs.index)]
-    tracks = pd.concat([_trim(g, trim_meters) for _, g in tracks.groupby("activity_id")])
+    if public:
+        from . import privacy
+        tracks = privacy.apply(tracks, trim_meters or privacy.DEFAULT_TRIM_M)
+    else:
+        tracks = pd.concat([_trim(g, trim_meters) for _, g in tracks.groupby("activity_id")])
     tracks = toronto_only(tracks)
     if tracks.empty:
         raise SystemExit("No runs inside Toronto.")
@@ -134,7 +139,10 @@ def build(trim_meters: float = 0) -> Path:
     folium.LayerControl(collapsed=False).add_to(m)
 
     m.get_root().html.add_child(folium.Element(
-        "<style>.leaflet-container{background:#1a1a19}</style>"
+        "<style>.leaflet-container{background:#1a1a19}"
+        "#back{position:fixed;top:12px;left:56px;z-index:1000;background:#1a1a19;color:#f0efec;border:1px solid #383835;border-radius:4px;padding:6px 10px;text-decoration:none;font:600 12px system-ui,-apple-system,\"Segoe UI\",sans-serif}"
+        "#back:hover{background:#2c2c2a}</style>"
+        '<a id="back" href="report.html">← Running report</a>'
         f"""<script>
 window.addEventListener('load', () => {{
   const map = window._map = {m.get_name()}, city = L.latLngBounds({city});
@@ -153,7 +161,7 @@ window.addEventListener('load', () => {{
   map.createPane('outside');
   map.getPane('outside').style.zIndex = 350;          // above tiles (200), below heat/routes (400)
   map.getPane('outside').style.pointerEvents = 'none';
-  const world = [[-90, -360], [-90, 360], [90, 360], [90, -360]];
+  const world = [[-85, -360], [-85, 360], [85, 360], [85, -360]];  // Web Mercator stops at ~±85°
   const box = [city.getSouthWest(), city.getNorthWest(), city.getNorthEast(), city.getSouthEast()];
   L.polygon([world, box], {{pane: 'outside', stroke: false, fillColor: '#1a1a19',
                             fillOpacity: 1, interactive: false}}).addTo(map);
@@ -162,8 +170,8 @@ window.addEventListener('load', () => {{
 }});
 </script>"""))
 
-    OUT.mkdir(exist_ok=True)
-    path = OUT / "heatmap.html"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / "heatmap.html"
     m.save(path)
     n = tracks["activity_id"].nunique()
     print(f"Heatmap (Toronto): {n} runs, {len(tracks):,} points, {len(years)} year layer(s) -> {path}")

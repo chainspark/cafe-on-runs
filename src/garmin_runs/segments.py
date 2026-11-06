@@ -24,6 +24,7 @@ STEP_M = 100.0         # candidate windows start every 100 m along each run
 END_RADIUS_M = 35.0    # how close a pass must come to the segment's start/end points
 MIN_SPAN = 0.5         # straight-line start->end must be >= 50% of the segment length
 MAX_PACE = 9.0         # min/km; slower candidate windows are walking/stopped, not running
+MAX_GAP_M = 50.0       # a jump bigger than this between points = gap, not a continuous stretch
 EXACT_CANDIDATES = 4000  # candidates that get an exact run count
 MAX_OVERLAP = 0.2      # a new segment may share at most 20% of its path with a chosen one
 WEATHER_ROUND = 1      # decimals for the weather lookup point (~10 km): one series per city
@@ -96,6 +97,10 @@ def find_segments(tracks: pd.DataFrame, length_m: float, n: int = 5) -> list[dic
         for s in np.arange(d[0], d[-1] - length_m, STEP_M):
             i, j = np.searchsorted(d, [s, s + length_m])
             j = min(j, len(d) - 1)
+            # must be a full-length, continuous stretch: a window starting inside a GPS gap or a
+            # privacy hole would otherwise be silently shorter than length_m
+            if d[j] - d[i] < 0.95 * length_m or np.diff(d[i:j + 1]).max(initial=0) > MAX_GAP_M:
+                continue
             # must actually go somewhere (not a loop/zig-zag around the start area)...
             if _dist_m(lat[i], lon[i], lat[j], lon[j]) < MIN_SPAN * length_m:
                 continue
@@ -219,7 +224,9 @@ def temperatures(lat: float, lon: float, start: datetime, end: datetime) -> pd.S
 
 
 # ---------- pipeline ----------
-def run(length_m: float = 1000, years: float = 2, top: int = 5) -> Path:
+def run(length_m: float = 1000, years: float = 2, top: int = 5,
+        out_dir: Path = OUT, public: bool = False) -> Path:
+    """public=True: segments are found on privacy-scrubbed tracks and no CSV is written."""
     since = datetime.now(timezone.utc) - timedelta(days=round(365.25 * years))
     runs = load_runs()
     names = runs.set_index("activity_id")
@@ -228,6 +235,9 @@ def run(length_m: float = 1000, years: float = 2, top: int = 5) -> Path:
     recent_ids = set(runs.loc[runs["start"] >= since.replace(tzinfo=None), "activity_id"])
     tracks = tracks[tracks["activity_id"].isin(recent_ids) & (ts >= since)]
     tracks = toronto_only(tracks)  # segments (and their map) are Toronto-only
+    if public:
+        from . import privacy
+        tracks = privacy.apply(tracks)
 
     # Over-fetch candidates, time them, then rank by runs with a *timed* pass: a run that
     # merely passes near a segment (e.g. on a parallel path) doesn't count.
@@ -252,12 +262,14 @@ def run(length_m: float = 1000, years: float = 2, top: int = 5) -> Path:
         seg["passes"] = p
         all_passes.append(p)
 
-    OUT.mkdir(exist_ok=True)
-    out_csv = OUT / "segment_passes.csv"
-    pd.concat(all_passes).to_csv(out_csv, index=False)
+    out_dir.mkdir(parents=True, exist_ok=True)
     _print_summary(segs)
-    path = _html(segs, since)
-    print(f"Segment report -> {path}\nAll passes -> {out_csv}")
+    path = _html(segs, since, out_dir)
+    print(f"Segment report -> {path}")
+    if not public:
+        out_csv = out_dir / "segment_passes.csv"
+        pd.concat(all_passes).to_csv(out_csv, index=False)
+        print(f"All passes -> {out_csv}")
     return path
 
 
@@ -401,7 +413,7 @@ def _chart_data(segs: list[dict]) -> list[dict]:
     return out
 
 
-def _html(segs: list[dict], since: datetime) -> Path:
+def _html(segs: list[dict], since: datetime, out_dir: Path = OUT) -> Path:
     seg_vars_light = "".join(f"--seg{i + 1}:{c};" for i, c in enumerate(SEG_COLORS_LIGHT))
     seg_vars_dark = "".join(f"--seg{i + 1}:{c};" for i, c in enumerate(SEG_COLORS_DARK))
     page = (SEGMENT_TEMPLATE
@@ -415,7 +427,7 @@ def _html(segs: list[dict], since: datetime) -> Path:
             .replace("__OVERVIEW__", _overview_rows(segs))
             .replace("__SECTIONS__", "\n".join(_section(s) for s in segs))
             .replace("__DATA__", json.dumps(_chart_data(segs))))
-    path = OUT / "segment.html"
+    path = out_dir / "segment.html"
     path.write_text(page, encoding="utf-8")
     return path
 

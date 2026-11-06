@@ -46,7 +46,8 @@ def _neighbourhoods() -> tuple[pd.DataFrame | None, int]:
         return None, 0
 
 
-def build() -> Path:
+def build(out_dir: Path = OUT, public: bool = False) -> Path:
+    """public=True: no neighbourhood tile/card/link (they would reveal where you live)."""
     s = summarize()
     t, runs = s["totals"], s["runs"]
 
@@ -77,7 +78,7 @@ def build() -> Path:
         _tile("Biggest week", f"{t['best_week_km']:.1f} km", f"week of {t['best_week']:%d %b %Y}"),
     ])
 
-    hoods, toronto_runs = _neighbourhoods()
+    hoods, toronto_runs = (None, 0) if public else _neighbourhoods()
     if hoods is not None and not hoods.empty:
         fav = hoods.iloc[0]
         tiles += _tile("Favourite neighbourhood",
@@ -117,14 +118,19 @@ def build() -> Path:
 
     page = TEMPLATE.replace("__TILES__", tiles).replace("__BEST__", best_html) \
         .replace("__YEARLY__", yearly_html).replace("__RECENT__", recent_html) \
-        .replace("__HOODS__", hoods_html) \
+        .replace("__NEIGHBOURHOOD_CARD__", "" if public else NEIGHBOURHOOD_CARD).replace("__HOODS__", hoods_html) \
         .replace("__DATA__", json.dumps(data))
-    OUT.mkdir(exist_ok=True)
-    path = OUT / "report.html"
+    if public:
+        page = page.replace('<a href="neighbourhood.html">Favourite neighbourhood →</a>', "")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / "report.html"
     path.write_text(page, encoding="utf-8")
     print(f"Report -> {path}")
     return path
 
+
+NEIGHBOURHOOD_CARD = (' <div class="card"><h2>Top neighbourhoods</h2>'
+                      '<p class="note">Toronto, by number of runs passing through</p>__HOODS__</div>')
 
 TEMPLATE = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -147,6 +153,7 @@ h2{font-size:15px;margin:0 0 2px}
 .note{font-size:12px;margin:0 0 8px}
 header{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:20px}
 header a{color:var(--s1);font-weight:600;text-decoration:none}
+.pages{display:flex;flex-wrap:wrap;gap:6px 18px}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:12px;margin-bottom:16px}
 .tile.wide{grid-column:1/-1}
 @media (min-width:900px){.tiles{grid-template-columns:repeat(4,1fr)}.tile.wide{grid-column:span 2}}
@@ -166,7 +173,7 @@ td{border-bottom:1px solid var(--grid);padding:6px 8px}
 </style></head>
 <body><main>
 <header><div><h1>Running Report</h1><div class="muted">From Garmin Connect, via the Personal API</div></div>
-<a href="heatmap.html">Open route heatmap →</a></header>
+<nav class="pages"><a href="heatmap.html">Route heatmap →</a><a href="segment.html">Most-run segments →</a><a href="neighbourhood.html">Favourite neighbourhood →</a></nav></header>
 
 <section class="tiles">__TILES__</section>
 
@@ -183,7 +190,7 @@ td{border-bottom:1px solid var(--grid);padding:6px 8px}
 <div class="grid">
  <div class="card"><h2>Best efforts</h2><p class="note">fastest stretch inside any run, from GPS</p>__BEST__</div>
  <div class="card"><h2>By year</h2><p class="note">&nbsp;</p>__YEARLY__</div>
- <div class="card"><h2>Top neighbourhoods</h2><p class="note">Toronto, by number of runs passing through</p>__HOODS__</div>
+__NEIGHBOURHOOD_CARD__
 </div>
 <div class="card wide"><h2>Recent runs</h2>__RECENT__</div>
 </main>

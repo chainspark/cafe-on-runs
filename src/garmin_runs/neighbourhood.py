@@ -306,7 +306,7 @@ td:first-child{{white-space:nowrap}}
 .num{{text-align:right;font-variant-numeric:tabular-nums}}
 details summary{{cursor:pointer;font-weight:600}}
 </style></head><body><main>
-<header><h1>Your favourite neighbourhood: {fav}</h1>
+<header><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><h1>Your favourite neighbourhood: {fav}</h1><a href="report.html" style="font-weight:600">← Running report</a></div>
 <div class="muted">From all your Toronto runs · City of Toronto neighbourhood boundaries and street centreline (Toronto Open Data)</div></header>
 
 <section class="tiles">

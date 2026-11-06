@@ -70,6 +70,13 @@ def main() -> None:
     nb.add_argument("--name", help="analyse this neighbourhood instead of the favourite (exact City name)")
     nb.set_defaults(func=lambda a: __import__("garmin_runs.neighbourhood", fromlist=["build"]).build(a.name))
 
+    pb = sub.add_parser("publish", help="build the public, privacy-safe site into docs/ (for GitHub Pages)")
+    pb.add_argument("--fetch", action="store_true", help="download new activities first (uses your current API key)")
+    pb.add_argument("--trim-meters", type=float, default=500, help="hide the first/last N metres of every run")
+    pb.add_argument("--out", default="docs", help="output folder (default docs/, served by GitHub Pages)")
+    pb.set_defaults(func=lambda a: __import__("garmin_runs.publish", fromlist=["publish"]).publish(
+        a.fetch, __import__("pathlib").Path(a.out), a.trim_meters))
+
     al = sub.add_parser("all",help="fetch, parse, map, report")
     al.add_argument("--trim-meters", type=float, default=0)
 

@@ -57,6 +57,12 @@ Pulls the owner's own Garmin Connect data through the **Garmin Personal API**. T
 ## Data and privacy
 - `data/` and `output/` are gitignored and contain precise GPS traces of the owner's runs, including the area around their home. Don't commit or publish them.
 - The `map --trim-meters N` option hides the first and last N metres of each run.
+- **Public site = `docs/` only** (GitHub Pages serves `main:/docs` once the repo is public). It is built by `publish [--fetch] [--trim-meters 500]` (`publish.py`) and holds: report (also as `index.html`), heatmap, segments, `.nojekyll`. Updates are **manual**: the owner runs `publish --fetch`, reviews, then commits and pushes. Don't automate it.
+- **Never publish** the neighbourhood page, any CSV, `data/` or `output/`. The owner's neighbourhood and personal location must not appear publicly.
+- `privacy.py` scrubs tracks for every public page: it trims the first/last 500 m of each run and removes every point inside **privacy zones**. Zones are density clusters (250 m links, at least 10 starts/finishes) of start/finish points from **all** runs. Each zone's radius is the 95th-percentile spread + 300 m (minimum 600 m), and its centre is shifted at random by up to 200 m. Real centres and shifts are kept in `data/privacy.json`: never publish it, and keep it stable (deleting it re-rolls the shifts).
+- `publish` ends with `privacy.check`, which scans every `[lat, lon]` in `docs/*.html` and fails (deleting the generated pages) if any lies within radius − 200 m of a real centre, or if a forbidden name appears (`neighbourhood.html`, the top-5 neighbourhood names). If it fails, fix the cause; don't loosen the check.
+- Builders take `out_dir` and `public`: `heatmap.build`, `segments.run`, `report.build`. With `public=True` they apply privacy, drop neighbourhood content and write no CSVs.
+- Privacy holes split runs into pieces, so segment windows must be full-length and continuous (`MAX_GAP_M`). Without that check, a "1 km" segment was really about 530 m.
 
 ## Outputs and other modules (brief)
 - **`heatmap.py`** writes `output/heatmap.html`.
