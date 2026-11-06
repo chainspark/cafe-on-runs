@@ -1,0 +1,199 @@
+"""Cafe tolerance: export the dataset, compile the C++ engine to WebAssembly, and build the page.
+
+    python -m cafe_tolerance cafes             -> output/cafe_tolerance.html (private, full tracks)
+    python -m cafe_tolerance cafes --public    -> privacy-scrubbed page (publish.py uses this)
+
+Pipeline: tracks.parquet (+ privacy.apply when public) -> runs split into parts at gaps; City
+street centreline pieces near the cafes (the nominals); OSM cafes near the runs (the datums)
+-> cafe_blob.encode -> wasm/cafe_tol/generated/dataset_<target>.inc -> em++ in the pinned
+emscripten Docker image -> a single self-contained HTML page (the wasm is inlined, so it works
+from file://).
+
+The generated .inc and the build output hold GPS data: both are gitignored.
+"""
+from __future__ import annotations
+
+import datetime as dt
+import html
+import json
+import subprocess
+import time
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from scipy.spatial import cKDTree
+
+from . import cafe_blob, privacy
+from .fetch import DATA, SUMMARIES
+from .opendata import STREET_CLASSES, TORONTO, load
+from .parse import TRACKS
+
+OUT = Path("output")
+ROOT = Path(__file__).resolve().parents[2]
+WASM = ROOT / "wasm" / "cafe_tol"
+TEMPLATE = Path(__file__).with_name("cafes.html")
+IMAGE = "emscripten/emsdk:4.0.10"
+
+CAFES_CACHE = DATA / "cafes_osm.json"
+OVERPASS = "https://overpass-api.de/api/interpreter"
+USER_AGENT = "cafe-tolerance/0.1 (personal running analysis)"
+
+R_MAX_M = 300.0          # largest search radius the page offers; data beyond it is never needed
+GAP_M = 50.0             # a jump this long splits a track into parts (privacy holes, GPS dropouts)
+MIN_POINTS_IN_CITY = 20  # a run needs ~100 m inside Toronto to count
+LAT0 = 43.7
+
+
+def _xy(lat, lon) -> np.ndarray:
+    lat, lon = np.asarray(lat, dtype=float), np.asarray(lon, dtype=float)
+    return np.c_[lon * 111_320 * np.cos(np.radians(LAT0)), lat * 110_540]
+
+
+# ---------- inputs ----------
+def fetch_cafes(refresh: bool = False) -> list[dict]:
+    """Every amenity=cafe in the City of Toronto bounding box, from OpenStreetMap (cached)."""
+    if CAFES_CACHE.exists() and not refresh:
+        return json.loads(CAFES_CACHE.read_text(encoding="utf-8"))
+    s, n, w, e = TORONTO[0], TORONTO[1], TORONTO[2], TORONTO[3]
+    query = f'[out:json][timeout:90];(node["amenity"="cafe"]({s},{w},{n},{e});way["amenity"="cafe"]({s},{w},{n},{e}););out center tags;'
+    req = urllib.request.Request(OVERPASS, data=urllib.parse.urlencode({"data": query}).encode(),
+                                 headers={"User-Agent": USER_AGENT})
+    print("Fetching cafes from OpenStreetMap (Overpass) ...")
+    for attempt in range(3):
+        try:
+            elements = json.load(urllib.request.urlopen(req, timeout=120))["elements"]
+            break
+        except Exception as ex:  # Overpass is busy now and then
+            if attempt == 2:
+                raise
+            print(f"  Overpass error ({ex}); retrying")
+            time.sleep(10 * (attempt + 1))
+    cafes = []
+    for el in elements:
+        lat, lon = (el["lat"], el["lon"]) if el["type"] == "node" else (el["center"]["lat"], el["center"]["lon"])
+        cafes.append({"osm_id": el["id"] if el["type"] == "node" else -el["id"],  # ways negative
+                      "name": (el.get("tags") or {}).get("name") or "Unnamed cafe", "lat": lat, "lon": lon})
+    DATA.mkdir(exist_ok=True)
+    CAFES_CACHE.write_text(json.dumps(cafes), encoding="utf-8")
+    print(f"  {len(cafes):,} cafes cached in {CAFES_CACHE}")
+    return cafes
+
+
+def _tracks(public: bool, trim_m: float) -> pd.DataFrame:
+    t = pd.read_parquet(TRACKS, columns=["activity_id", "ts", "lat", "lon", "distance_m"])
+    if public:
+        t = privacy.apply(t, trim_m)
+    lat_lo, lat_hi, lon_lo, lon_hi = TORONTO
+    t = t[t["lat"].between(lat_lo, lat_hi) & t["lon"].between(lon_lo, lon_hi)]
+    t = t[t.groupby("activity_id")["lat"].transform("size") >= MIN_POINTS_IN_CITY]
+    return t.sort_values(["activity_id", "ts"]).reset_index(drop=True)
+
+
+def _runs(t: pd.DataFrame) -> list[cafe_blob.Run]:
+    acts = {a["activityId"]: a for a in json.loads(SUMMARIES.read_text(encoding="utf-8"))}
+    runs = []
+    for aid, g in t.groupby("activity_id", sort=True):
+        ll = g[["lat", "lon"]].to_numpy()
+        xy = _xy(ll[:, 0], ll[:, 1])
+        step = np.r_[0, np.hypot(*np.diff(xy, axis=0).T)]
+        dd = np.r_[0, np.diff(g["distance_m"].to_numpy())]
+        cut = np.flatnonzero((step > GAP_M) | (np.nan_to_num(dd) > GAP_M))
+        parts = [p for p in np.split(ll, cut) if len(p) >= 2]
+        start = pd.to_datetime((acts.get(aid) or {}).get("startTimeLocal") or g["ts"].iloc[0])
+        runs.append(cafe_blob.Run(int(aid), start.year, start.month, start.day, parts))
+    return runs
+
+
+def _streets(near: np.ndarray, forbidden: list[str], zones: list[dict] | None) -> list[cafe_blob.Street]:
+    """Centreline pieces (the nominals) within R_MAX of any kept cafe."""
+    tree = cKDTree(_xy(near[:, 0], near[:, 1]))
+    classes = {c: i for i, c in enumerate(STREET_CLASSES)}
+    out = []
+    for f in load("toronto-centreline-tcl"):
+        p = f["properties"]
+        name = p.get("LINEAR_NAME_FULL")
+        if p.get("FEATURE_CODE_DESC") not in classes or not name or name == "None":
+            continue
+        if any(w.lower() in name.lower() for w in forbidden):
+            continue
+        geom = f["geometry"]
+        lines = geom["coordinates"] if geom["type"] == "MultiLineString" else [geom["coordinates"]]
+        for line in lines:
+            c = np.asarray(line, dtype=float)[:, :2]
+            pts = np.c_[c[:, 1], c[:, 0]]  # lat, lon
+            if len(pts) < 2:
+                continue
+            xy = _xy(pts[:, 0], pts[:, 1])
+            # densify to 25 m so long pieces passing close to a cafe are found
+            seg = np.hypot(*np.diff(xy, axis=0).T)
+            dense = np.vstack([xy[:-1] + (xy[1:] - xy[:-1]) * f_ for f_ in np.linspace(0, 1, max(2, int(seg.max() // 25) + 2))])
+            if not np.isfinite(tree.query(dense, distance_upper_bound=R_MAX_M + 25)[0]).any():
+                continue
+            if zones and privacy._hidden(pts[:, 0], pts[:, 1], zones, shifted=True).any():
+                continue  # never export a street point inside a privacy zone
+            out.append(cafe_blob.Street(int(p.get("CENTRELINE_ID") or 0), classes[p["FEATURE_CODE_DESC"]], name, pts))
+    return out
+
+
+def export(public: bool = False, trim_m: float = privacy.DEFAULT_TRIM_M, refresh_cafes: bool = False) -> Path:
+    """Write wasm/cafe_tol/generated/dataset_<target>.inc and return its path."""
+    target = "public" if public else "private"
+    t = _tracks(public, trim_m)
+    runs = _runs(t)
+    pts = np.vstack([p for r in runs for p in r.parts])
+    zones = privacy.zones() if public else None
+    forbidden = privacy.forbidden_names() if public else []
+
+    raw = fetch_cafes(refresh_cafes)
+    c_ll = np.array([[c["lat"], c["lon"]] for c in raw])
+    near_run = np.isfinite(cKDTree(_xy(pts[:, 0], pts[:, 1])).query(_xy(c_ll[:, 0], c_ll[:, 1]),
+                                                                     distance_upper_bound=R_MAX_M)[0])
+    keep = near_run.copy()
+    if public:
+        grown = [z | {"radius_m": z["radius_m"] + R_MAX_M} for z in zones]  # no pass may touch a zone
+        keep &= ~privacy._hidden(c_ll[:, 0], c_ll[:, 1], grown, shifted=True)
+        keep &= np.array([not any(w.lower() in c["name"].lower() for w in forbidden) for c in raw])
+    cafes = [cafe_blob.Cafe(c["lat"], c["lon"], int(c["osm_id"]), c["name"]) for c, k in zip(raw, keep) if k]
+    print(f"Cafes: {len(raw):,} in Toronto, {int(near_run.sum()):,} within {R_MAX_M:.0f} m of a run, "
+          f"{len(cafes):,} exported")
+
+    streets = _streets(np.array([[c.lat, c.lon] for c in cafes]).reshape(-1, 2), forbidden, zones)
+    ds = cafe_blob.Dataset(cafe_blob.FLAG_PUBLIC if public else 0, runs, streets, cafes)
+    blob = cafe_blob.encode(ds)
+    inc = WASM / "generated" / f"dataset_{target}.inc"
+    cafe_blob.write_inc(blob, inc)
+    print(f"Dataset ({target}): {len(runs)} runs, {len(pts):,} points, {len(streets):,} street pieces, "
+          f"{len(cafes):,} cafes -> {len(blob) / 1e6:.2f} MB")
+    return inc
+
+
+def compile_wasm(target: str) -> Path:
+    """Run build.sh in the pinned emscripten image; returns the built JS (wasm inlined)."""
+    cmd = ["docker", "run", "--rm", "-v", f"{WASM.as_posix()}:/src", "-w", "/src", IMAGE, "bash", "build.sh", target]
+    print(f"Compiling C++ -> WebAssembly ({target}) in {IMAGE} ...")
+    try:
+        subprocess.run(cmd, check=True)
+    except FileNotFoundError:
+        raise SystemExit("Docker is not installed or not on PATH - it is needed to compile the C++.")
+    except subprocess.CalledProcessError as e:
+        raise SystemExit(f"WASM build failed (exit {e.returncode}). Is Docker running?")
+    return WASM / "build" / f"cafe_tol_{target}.js"
+
+
+def build(out_dir: Path = OUT, public: bool = False, trim_m: float = privacy.DEFAULT_TRIM_M,
+          refresh_cafes: bool = False) -> Path:
+    target = "public" if public else "private"
+    export(public, trim_m, refresh_cafes)
+    js = compile_wasm(target).read_text(encoding="utf-8").replace("</script", "<\\/script")
+    page = (TEMPLATE.read_text(encoding="utf-8")
+            .replace("/*__WASM__*/", js)
+            .replace("__MODE__", "public" if public else "private")
+            .replace("__BUILT__", html.escape(dt.date.today().isoformat())))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / ("index.html" if public else "cafe_tolerance.html")
+    path.write_text(page, encoding="utf-8")
+    print(f"Wrote {path} ({path.stat().st_size / 1e6:.1f} MB)")
+    return path
