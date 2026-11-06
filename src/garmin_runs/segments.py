@@ -185,6 +185,7 @@ def passes(tracks: pd.DataFrame, seg: dict) -> pd.DataFrame:
                 rows.append({
                     "activity_id": aid,
                     "start_utc": ts[lo],
+                    "end_utc": ts[hi],
                     "direction": fwd if a < b else rev,
                     "secs": secs,
                     "pace_min_km": secs / 60 / (seg["length_m"] / 1000),
@@ -227,6 +228,23 @@ def temperatures(lat: float, lon: float, start: datetime, end: datetime) -> pd.S
 def run(length_m: float = 1000, years: float = 2, top: int = 5,
         out_dir: Path = OUT, public: bool = False) -> Path:
     """public=True: segments are found on privacy-scrubbed tracks and no CSV is written."""
+    segs, _, since = select(length_m, years, top, public)
+
+    all_passes = [s["passes"] for s in segs]
+    out_dir.mkdir(parents=True, exist_ok=True)
+    _print_summary(segs)
+    path = _html(segs, since, out_dir)
+    print(f"Segment report -> {path}")
+    if not public:
+        out_csv = out_dir / "segment_passes.csv"
+        pd.concat(all_passes).to_csv(out_csv, index=False)
+        print(f"All passes -> {out_csv}")
+    return path
+
+
+def select(length_m: float = 1000, years: float = 2, top: int = 5,
+           public: bool = False) -> tuple[list[dict], pd.DataFrame, datetime]:
+    """Top segments (ranked, each with timed passes + temperatures), the tracks used, and the cutoff."""
     since = datetime.now(timezone.utc) - timedelta(days=round(365.25 * years))
     runs = load_runs()
     names = runs.set_index("activity_id")
@@ -248,7 +266,6 @@ def run(length_m: float = 1000, years: float = 2, top: int = 5,
         seg["runs"] = set(seg["passes"]["activity_id"]) if not seg["passes"].empty else set()
     segs = sorted((s for s in segs if s["runs"]), key=lambda s: (-len(s["runs"]), -len(s["passes"])))[:top]
 
-    all_passes = []
     now = datetime.now(timezone.utc)
     for rank, seg in enumerate(segs, 1):
         seg["rank"] = rank
@@ -260,17 +277,7 @@ def run(length_m: float = 1000, years: float = 2, top: int = 5,
         p["local_start"] = p["activity_id"].map(names["start"])
         p.insert(0, "segment", rank)
         seg["passes"] = p
-        all_passes.append(p)
-
-    out_dir.mkdir(parents=True, exist_ok=True)
-    _print_summary(segs)
-    path = _html(segs, since, out_dir)
-    print(f"Segment report -> {path}")
-    if not public:
-        out_csv = out_dir / "segment_passes.csv"
-        pd.concat(all_passes).to_csv(out_csv, index=False)
-        print(f"All passes -> {out_csv}")
-    return path
+    return segs, tracks, since
 
 
 def _print_summary(segs: list[dict]) -> None:

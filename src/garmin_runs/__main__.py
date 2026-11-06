@@ -70,10 +70,18 @@ def main() -> None:
     nb.add_argument("--name", help="analyse this neighbourhood instead of the favourite (exact City name)")
     nb.set_defaults(func=lambda a: __import__("garmin_runs.neighbourhood", fromlist=["build"]).build(a.name))
 
+    tl = sub.add_parser("tolerance", help="path / heart-rate / time tolerance of the most-run segment")
+    tl.add_argument("--length", type=float, default=1000, help="segment length in metres")
+    tl.add_argument("--years", type=float, default=2, help="look back this many years")
+    tl.set_defaults(func=lambda a: __import__("garmin_runs.tolerance", fromlist=["build"]).build(a.length, a.years))
+
     r3 = sub.add_parser("race3d", help="3D flythrough page for each approved public race (race3d.RACES)")
     r3.add_argument("--out", default="output", help="output folder")
     r3.set_defaults(func=lambda a: __import__("garmin_runs.race3d", fromlist=["build"]).build(
         __import__("pathlib").Path(a.out)))
+
+    pt = sub.add_parser("pace-tolerance", help="pace vs heart rate, temperature and time of day (all runs, per km)")
+    pt.set_defaults(func=lambda a: __import__("garmin_runs.pace_tolerance", fromlist=["build"]).build())
 
     pb = sub.add_parser("publish", help="build the public, privacy-safe site into docs/ (for GitHub Pages)")
     pb.add_argument("--fetch", action="store_true", help="download new activities first (uses your current API key)")

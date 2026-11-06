@@ -81,4 +81,11 @@ Pulls the owner's own Garmin Connect data through the **Garmin Personal API**. T
   - Runnable area for each quarter, cumulative: a `--buffer` corridor around the edges plus enclosed holes, computed with scipy `distance_transform_edt` and `binary_fill_holes`.
   - "Covered" area (`covered_km2`) uses the same rule on one quarter's runs alone, repeats included, and is not cumulative. Runs are assigned to quarters in local time (`America/Toronto`). The timeline starts at 2024 Q1 or the first quarter with data, whichever is later; at present that is 2024 Q2.
   - The page is an animated Leaflet canvas with the rasters sent zlib + base64 and decoded with `DecompressionStream`. The URL hash `#<quarter>.<progress>` freezes on a frame, which is useful for headless screenshots because headless Edge barely advances the animation.
+- **`tolerance.py`** writes `output/tolerance.html` (command `tolerance`). It covers the most-run segment's passes: sideways deviation from the line, HR and HR drift, and time vs median, each regressed on pace, temperature, time of day and direction, plus km into the run. It provides `ols_cluster` (standard errors clustered by run) and `_effects_table(res, unit, labels, rows_name)`, which other analyses reuse.
+- **`pace_tolerance.py`** writes `output/pace_tolerance.html` and `pace_tolerance_splits.csv` (command `pace-tolerance`).
+  - Every Toronto run is cut into full 1 km splits. Pace is **moving** pace: steps slower than 1 m/s are dropped.
+  - Level model: pace ~ HR + temperature + time of day, with controls for km in, first km, elevation change and stopped time.
+  - A banded-temperature variant gives the pace at the same effort per band.
+  - Consistency model: SD of a run's splits after km 1, one row per run.
+  - Effects are re-checked without outlier splits. The page is private and not published.
 - **Visual check:** screenshot an output with headless Edge (`msedge --headless=new --screenshot=... file:///...`), using a fresh `--user-data-dir` so cached tiles don't hide problems. In PowerShell, launch it with `Start-Process -Wait`, or the screenshot won't be written before the command returns.
