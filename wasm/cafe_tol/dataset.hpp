@@ -11,6 +11,12 @@
 
 namespace ct {
 
+constexpr char kMagic[8] = {'C', 'A', 'F', 'E', 'T', 'O', 'L', '1'};  // fixed name; the 1 is not the version
+constexpr uint32_t kVersion = 2;         // written by cafe_blob.encode
+constexpr uint32_t kMinVersion = 1;      // v1: no metadata
+constexpr uint32_t kMaxMetaBytes = 64 * 1024;
+constexpr double kCoordScale = 1e5;  // coordinates are stored as integer 1e-5 degrees
+
 struct LatLon {
     double lat = 0, lon = 0;
 };
@@ -35,16 +41,14 @@ struct Cafe {
 };
 
 struct Dataset {
-    uint32_t version = 1;
+    uint32_t version = kVersion;
     uint32_t flags = 0;  // bit 0: public (privacy-scrubbed) build
+    std::string meta;    // v2: UTF-8 JSON provenance (sources, licences, dates; never coordinates); "" for v1
     std::vector<Run> runs;
     std::vector<Street> streets;
     std::vector<Cafe> cafes;
 };
 
-constexpr char kMagic[8] = {'C', 'A', 'F', 'E', 'T', 'O', 'L', '1'};
-constexpr uint32_t kVersion = 1;
-constexpr double kCoordScale = 1e5;  // coordinates are stored as integer 1e-5 degrees
 
 // Returns false and fills err on malformed input.
 bool decode(const uint8_t* data, size_t size, Dataset& out, std::string& err);

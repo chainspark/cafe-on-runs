@@ -3,6 +3,7 @@
 Little-endian layout (read by wasm/cafe_tol/dataset.cpp):
 
     "CAFETOL1" | u32 version | u32 flags (bit0 = public)
+    u32 meta_len; utf8 JSON provenance (version >= 2): build info and data sources, never coordinates
     u32 n_runs;    per run:   i64 activity_id, u16 year, u8 month, u8 day, u16 n_parts,
                               per part: coords
     u32 n_streets; per piece: u32 centreline_id, u8 class, u16 name_len, utf8 name, coords
@@ -13,13 +14,16 @@ Also used by privacy.check to read the dataset back out of a built page and scan
 """
 from __future__ import annotations
 
+import json
 import struct
 from dataclasses import dataclass, field
 
 import numpy as np
 
-MAGIC = b"CAFETOL1"
-VERSION = 1
+MAGIC = b"CAFETOL1"  # a fixed name: the 1 is not the format version
+VERSION = 2
+SUPPORTED_VERSIONS = (1, 2)  # v1 had no provenance meta
+MAX_META_BYTES = 64 * 1024
 SCALE = 1e5
 FLAG_PUBLIC = 1
 
@@ -55,6 +59,7 @@ class Dataset:
     runs: list[Run]
     streets: list[Street]
     cafes: list[Cafe]
+    meta: dict = field(default_factory=dict)  # provenance: build info, data sources
 
     def all_points(self) -> np.ndarray:
         """Every coordinate in the dataset, (n, 2) lat, lon - for the privacy scan."""
@@ -92,7 +97,11 @@ def _str(s: str) -> bytes:
 
 
 def encode(ds: Dataset) -> bytes:
-    out = [MAGIC, struct.pack("<II", VERSION, ds.flags), struct.pack("<I", len(ds.runs))]
+    meta = json.dumps(ds.meta, ensure_ascii=False, separators=(",", ":")).encode("utf-8") if ds.meta else b""
+    if len(meta) > MAX_META_BYTES:
+        raise ValueError("dataset metadata too large")
+    out = [MAGIC, struct.pack("<II", VERSION, ds.flags), struct.pack("<I", len(meta)), meta,
+           struct.pack("<I", len(ds.runs))]
     for r in ds.runs:
         out.append(struct.pack("<qHBBH", r.activity_id, r.year, r.month, r.day, len(r.parts)))
         out += [_coords(p) for p in r.parts]
@@ -141,6 +150,8 @@ class _Reader:
 
     def str(self) -> str:
         n = self.fixed("H")
+        if self.pos + n > len(self.b):
+            raise ValueError("truncated string")
         s = self.b[self.pos:self.pos + n].decode("utf-8")
         self.pos += n
         return s
@@ -151,8 +162,15 @@ def decode(b: bytes, offset: int = 0) -> Dataset:
         raise ValueError("not a CAFETOL1 dataset")
     r = _Reader(b, offset + len(MAGIC))
     version, flags = r.fixed("II")
-    if version != VERSION:
+    if version not in SUPPORTED_VERSIONS:
         raise ValueError(f"unsupported dataset version {version}")
+    meta = {}
+    if version >= 2:
+        n = r.fixed("I")
+        if n > MAX_META_BYTES or r.pos + n > len(r.b):
+            raise ValueError("dataset metadata length out of range")
+        meta = json.loads(r.b[r.pos:r.pos + n].decode("utf-8")) if n else {}
+        r.pos += n
     runs = []
     for _ in range(r.fixed("I")):
         aid, year, month, day, n_parts = r.fixed("qHBBH")
@@ -166,7 +184,7 @@ def decode(b: bytes, offset: int = 0) -> Dataset:
     for _ in range(r.fixed("I")):
         lat, lon, osm = r.fixed("iiq")
         cafes.append(Cafe(lat / SCALE, lon / SCALE, osm, r.str()))
-    return Dataset(flags, runs, streets, cafes)
+    return Dataset(flags, runs, streets, cafes, meta)
 
 
 # ---------- reading a dataset back out of a compiled .wasm ----------
@@ -227,15 +245,15 @@ def wasm_memory_image(wasm: bytes) -> bytes:
 def find_in_wasm(wasm: bytes) -> list[Dataset]:
     """Every dataset in the module's initial memory.
 
-    The decoder's own 8-byte magic constant also lives in memory; an occurrence without a valid
-    version header is skipped (the engine would reject it too). Any other decoding error raises,
+    The decoder's own 8-byte magic constant also lives in memory; an occurrence without a
+    supported version header is skipped (the engine would reject it too). Any other decoding error raises,
     so a damaged dataset can never pass the privacy scan unread.
     """
     mem = wasm_memory_image(wasm)
     found, i = [], mem.find(MAGIC)
     while i >= 0:
         j = i + len(MAGIC)
-        if len(mem) >= j + 4 and struct.unpack_from("<I", mem, j)[0] == VERSION:
+        if len(mem) >= j + 4 and struct.unpack_from("<I", mem, j)[0] in SUPPORTED_VERSIONS:
             found.append(decode(mem, i))
         i = mem.find(MAGIC, i + 1)
     return found

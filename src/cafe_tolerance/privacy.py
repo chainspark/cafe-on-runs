@@ -14,7 +14,8 @@ Two layers, both applied to the GPS tracks before any public page is built:
 within a zone's guaranteed-hidden radius around the *real* centre, or if a forbidden name
 appears. Coordinates compiled into embedded WebAssembly are invisible to a text scan, so every
 base64 wasm module on a page is decoded, its CAFETOL1 dataset read back out of the module's
-memory image, and every run point, street point, cafe and name checked too. A wasm module
+memory image, and every run point, street point, cafe, name and the provenance metadata checked
+too (metadata may not contain any decimal with 3+ places). A wasm module
 without a readable dataset fails the check.
 
 data/privacy.json holds the real zone centres - it lives in data/ (gitignored) and must never
@@ -127,7 +128,10 @@ def apply(tracks: pd.DataFrame, trim_m: float = DEFAULT_TRIM_M) -> pd.DataFrame:
 # [lat, lon] pairs as written by JSON (lat first, both with decimals)
 _PAIR = re.compile(r"\[\s*(-?\d{1,2}\.\d{3,})\s*,\s*(-?\d{1,3}\.\d{3,})\s*\]")
 # a base64-encoded wasm module ("\0asm" -> "AGFzbQ"), however the loader wraps it
-_WASM_B64 = re.compile(r"AGFzbQ[A-Za-z0-9+/]{100,}={0,2}")
+# dataset metadata (provenance) may never contain a decimal with 3+ places: no coordinates, ever
+COORD_LIKE = re.compile(r"\d\.\d{3,}")
+# any length: even a tiny module could hide a coordinate pair, so every one must be scanned
+_WASM_B64 = re.compile(r"AGFzbQ[A-Za-z0-9+/]{2,}={0,2}")
 
 
 def forbidden_names(top: int = 5) -> list[str]:
@@ -152,8 +156,8 @@ def forbidden_names(top: int = 5) -> list[str]:
     return words
 
 
-def _embedded_points(text: str, label: str, problems: list[str]) -> tuple[np.ndarray, list[str]]:
-    """Coordinates and names inside every base64 wasm module on the page.
+def _embedded_points(text: str, label: str, problems: list[str]) -> tuple[np.ndarray, list[str], list[str]]:
+    """Coordinates, names and metadata (as JSON text) inside every base64 wasm module on the page.
 
     A module whose dataset can't be read is a failure: anything published must be scannable.
     """
@@ -161,7 +165,7 @@ def _embedded_points(text: str, label: str, problems: list[str]) -> tuple[np.nda
 
     from .cafe_blob import find_in_wasm
 
-    pts, names, n_mod = [], [], 0
+    pts, names, metas, n_mod = [], [], [], 0
     for m in _WASM_B64.finditer(text):
         n_mod += 1
         try:
@@ -174,10 +178,14 @@ def _embedded_points(text: str, label: str, problems: list[str]) -> tuple[np.nda
         for ds in found:
             pts.append(ds.all_points())
             names += ds.names()
+            if ds.meta:
+                metas.append(json.dumps(ds.meta, ensure_ascii=False))
+                metas.append(json.dumps(ds.meta))  # escaped form too, so no spelling hides a word
     if n_mod:
         n = sum(len(p) for p in pts)
-        print(f"  {label}: binary scan of {n_mod} embedded wasm module(s), {n:,} coordinates, {len(names):,} names")
-    return (np.vstack(pts) if pts else np.empty((0, 2))), names
+        print(f"  {label}: binary scan of {n_mod} embedded wasm module(s), {n:,} coordinates, {len(names):,} names, "
+              f"{sum(len(m.encode()) for m in metas[::2]):,} bytes of metadata")
+    return (np.vstack(pts) if pts else np.empty((0, 2))), names, metas
 
 
 def check(files: list[Path], forbidden: list[str]) -> None:
@@ -191,12 +199,15 @@ def check(files: list[Path], forbidden: list[str]) -> None:
     problems = []
     for f in files:
         text = f.read_text(encoding="utf-8")
-        binary_pts, binary_names = _embedded_points(text, f.name, problems)
-        haystack = (text + "\n" + "\n".join(binary_names)).lower()
+        binary_pts, binary_names, metas = _embedded_points(text, f.name, problems)
+        meta_text = "\n".join(metas)
+        if COORD_LIKE.search(meta_text):
+            problems.append(f"{f.name}: embedded dataset metadata contains a coordinate-like number")
+        haystack = (text + "\n" + "\n".join(binary_names) + "\n" + meta_text).lower()
         for word in forbidden:
             if word and word.lower() in haystack:
                 problems.append(f"{f.name}: mentions '{word}'")
-        pairs = np.array([(float(a), float(b)) for a, b in _PAIR.findall(text)
+        pairs = np.array([(float(a), float(b)) for a, b in _PAIR.findall(text + "\n" + meta_text)
                           if -90 <= float(a) <= 90 and -180 <= float(b) <= 180]).reshape(-1, 2)
         pts = np.vstack([pairs, binary_pts])
         if zs and len(pts):

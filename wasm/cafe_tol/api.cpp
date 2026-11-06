@@ -57,6 +57,7 @@ EMSCRIPTEN_KEEPALIVE int ct_init() {
 }
 EMSCRIPTEN_KEEPALIVE const char* ct_error() { return g_error.c_str(); }
 EMSCRIPTEN_KEEPALIVE int ct_flags() { return int(g_engine.data().flags); }
+EMSCRIPTEN_KEEPALIVE const char* ct_meta() { return g_engine.data().meta.c_str(); }  // "" for v1 datasets
 
 EMSCRIPTEN_KEEPALIVE int ct_run_count() { return int(g_engine.data().runs.size()); }
 EMSCRIPTEN_KEEPALIVE const int32_t* ct_run_years() { return g_years.data(); }

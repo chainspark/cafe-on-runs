@@ -71,6 +71,7 @@ static void test_roundtrip() {
     ds.runs.push_back(run(line(-300, -40, 300, 25)));
     ds.streets.push_back(street("Main St", -300, 0, 300, 0));
     ds.cafes.push_back(cafe(-12.5, 16));
+    ds.meta = R"({"schema":1,"sources":[{"id":"cafes","licence":"ODbL 1.0 – ©"}]})";
     const auto bytes = encode(ds);
     Dataset back;
     std::string err;
@@ -82,6 +83,7 @@ static void test_roundtrip() {
     for (size_t i = 0; same && i < a.size(); ++i) same = std::fabs(a[i].lat - b[i].lat) < 1e-5 && std::fabs(a[i].lon - b[i].lon) < 1e-5;
     CHECK(same, "varint coordinates round-trip to 1e-5 deg");
     CHECK(back.streets[0].name == "Main St" && back.cafes[0].name == "Test cafe", "names round-trip");
+    CHECK(back.version == kVersion && back.meta == ds.meta, "provenance metadata round-trips (non-ASCII too)");
     Dataset bad;
     CHECK(!decode(bytes.data(), bytes.size() - 3, bad, err), "truncated data is rejected");
 }
@@ -198,7 +200,36 @@ static void test_combined_yield() {
     CHECK(e.results()[0].runs == 0, "year filter removes runs from other years");
 }
 
+static void put_u32(std::vector<uint8_t>& b, size_t at, uint32_t v) {
+    for (int k = 0; k < 4; ++k) b[at + k] = uint8_t(v >> (8 * k));
+}
+
+static void test_dataset_versions() {
+    Dataset ds;
+    ds.runs.push_back(run(line(0, 0, 100, 0)));
+    ds.version = 1;
+    ds.meta = "ignored";
+    auto v1 = encode(ds);
+    Dataset back;
+    std::string err;
+    CHECK(decode(v1.data(), v1.size(), back, err) && back.version == 1 && back.meta.empty() && back.runs.size() == 1,
+          "a v1 dataset (no metadata) still decodes");
+    auto bad = v1;
+    put_u32(bad, 8, 3);
+    CHECK(!decode(bad.data(), bad.size(), back, err), "an unknown version is rejected");
+    ds.version = kVersion;
+    ds.meta = "{}";
+    auto v2 = encode(ds);
+    auto big = v2;
+    put_u32(big, 16, kMaxMetaBytes + 1);
+    CHECK(!decode(big.data(), big.size(), back, err), "metadata over the size cap is rejected");
+    auto past = v2;
+    put_u32(past, 16, kMaxMetaBytes);
+    CHECK(!decode(past.data(), past.size(), back, err), "a metadata length past the end is rejected");
+}
+
 int main() {
+    test_dataset_versions();
     test_roundtrip();
     test_position_diameter();
     test_out_and_back();

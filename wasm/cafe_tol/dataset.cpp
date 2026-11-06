@@ -35,7 +35,7 @@ public:
         return static_cast<int64_t>(u >> 1) ^ -static_cast<int64_t>(u & 1);
     }
     std::string str(size_t len) {
-        if (pos_ + len > n_) { ok_ = false; return {}; }
+        if (len > n_ - pos_) { ok_ = false; return {}; }  // no overflow on wasm32
         std::string s(reinterpret_cast<const char*>(d_ + pos_), len);
         pos_ += len;
         return s;
@@ -99,7 +99,13 @@ bool decode(const uint8_t* data, size_t size, Dataset& out, std::string& err) {
     if (!r.magic()) { err = "missing CAFETOL1 magic"; return false; }
     out.version = r.fixed<uint32_t>();
     out.flags = r.fixed<uint32_t>();
-    if (out.version != kVersion) { err = "unsupported dataset version"; return false; }
+    if (!r.ok() || out.version < kMinVersion || out.version > kVersion) { err = "unsupported dataset version"; return false; }
+    out.meta.clear();
+    if (out.version >= 2) {
+        const uint32_t n = r.fixed<uint32_t>();
+        if (n > kMaxMetaBytes) { err = "dataset metadata too large"; return false; }
+        out.meta = r.str(n);
+    }
 
     const uint32_t n_runs = r.fixed<uint32_t>();
     for (uint32_t i = 0; i < n_runs && r.ok(); ++i) {
@@ -138,6 +144,10 @@ std::vector<uint8_t> encode(const Dataset& ds) {
     std::vector<uint8_t> out(kMagic, kMagic + sizeof(kMagic));
     put<uint32_t>(out, ds.version);
     put<uint32_t>(out, ds.flags);
+    if (ds.version >= 2) {
+        put<uint32_t>(out, uint32_t(ds.meta.size()));
+        out.insert(out.end(), ds.meta.begin(), ds.meta.end());
+    }
     put<uint32_t>(out, uint32_t(ds.runs.size()));
     for (const auto& run : ds.runs) {
         put<int64_t>(out, run.activity_id);

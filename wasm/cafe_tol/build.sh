@@ -19,7 +19,7 @@ case "$target" in
   private|public)
     inc="generated/dataset_${target}.inc"
     if [ ! -f "$inc" ]; then echo "missing $inc - run the Python export first" >&2; exit 2; fi
-    exports="_ct_init,_ct_error,_ct_flags,_ct_run_count,_ct_run_years,_ct_run_ids,_ct_point_count,_ct_points,\
+    exports="_ct_init,_ct_error,_ct_flags,_ct_meta,_ct_run_count,_ct_run_years,_ct_run_ids,_ct_point_count,_ct_points,\
 _ct_part_count,_ct_part_start,_ct_part_run,_ct_cafe_count,_ct_cafe_latlon,_ct_cafe_osm,_ct_cafe_name,\
 _ct_street_name,_ct_set_radius,_ct_evaluate,_ct_detail,_ct_detail_passes,_ct_detail_part_count,_ct_detail_parts,\
 _ct_detail_feature_count,_ct_detail_features,_ct_detail_line_count,_ct_detail_line_start,_ct_detail_lines,\

@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import datetime as dt
 import json
 import urllib.request
 from pathlib import Path
@@ -27,13 +28,29 @@ def download(pkg: str) -> Path:
     if dest.exists():
         return dest
     OPEN.mkdir(parents=True, exist_ok=True)
-    res = json.load(urllib.request.urlopen(CKAN + pkg, timeout=60))["result"]["resources"]
-    url = next(r["url"] for r in res if r["name"] == DATASETS[pkg])
+    result = json.load(urllib.request.urlopen(CKAN + pkg, timeout=60))["result"]
+    res = next(r for r in result["resources"] if r["name"] == DATASETS[pkg])
     print(f"Downloading {DATASETS[pkg]} ...")
     tmp = dest.with_suffix(".part")
-    urllib.request.urlretrieve(url, tmp)
+    urllib.request.urlretrieve(res["url"], tmp)
     tmp.replace(dest)
+    # provenance sidecar: what was downloaded and when (shown on the page under "Data sources")
+    (OPEN / f"{pkg}.source.json").write_text(json.dumps({
+        "title": result.get("title", ""), "resource": DATASETS[pkg],
+        "resource_modified": res.get("last_modified") or res.get("metadata_modified") or "",
+        "retrieved": dt.date.today().isoformat()}, indent=1), encoding="utf-8")
     return dest
+
+
+def source(pkg: str) -> dict:
+    """Provenance of a downloaded dataset, without any network call. Falls back to the file date
+    (flagged "fallback") for files downloaded before sidecars existed."""
+    side = OPEN / f"{pkg}.source.json"
+    if side.exists():
+        return json.loads(side.read_text(encoding="utf-8"))
+    path = OPEN / f"{pkg}.geojson"
+    when = dt.date.fromtimestamp(path.stat().st_mtime).isoformat() if path.exists() else ""
+    return {"retrieved": when, "fallback": True}
 
 
 def load(pkg: str) -> list[dict]:

@@ -101,6 +101,16 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
 .leaflet-tooltip.cafe-tip { font: 600 11px var(--f-mono); background: #1c2026; color: #e6ebf0; border: 1px solid #3a424d; box-shadow: none }
 .leaflet-tooltip.cafe-tip::before { display: none }
 .leaflet-tooltip.cafe-tip.label { padding: 1px 5px; font-size: 10.5px; background: rgba(28,32,38,.82); border-color: transparent }
+.about { border: 1.5px solid var(--ink); background: var(--sheet); padding: 18px 20px 20px; display: grid; gap: 18px; scroll-margin-top: 12px }
+.about h2 { font-family: var(--f-display); font-size: 26px; font-weight: 720; font-stretch: 82%; margin: 0 }
+.about h3 { font-size: 15px }
+.about-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 18px 36px }
+.about section { display: grid; gap: 7px; align-content: start; min-width: 0 }
+.about ul { margin: 0; padding-left: 18px; display: grid; gap: 4px }
+.about p { max-width: 70ch }
+.about a, .intro a { color: var(--accent); text-underline-offset: 3px }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--ink); vertical-align: -1px }
+#sources td { vertical-align: top } #sources td:first-child { font-weight: 600; white-space: nowrap }
 </style>
 </head>
 <body>
@@ -110,6 +120,7 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
       <span class="eyebrow">GD&amp;T inspection · runs past Toronto cafes</span>
       <h1>Cafe Tolerance</h1>
       <p class="muted">Each run is a part from a production lot, the City street centreline is the drawing, and each cafe is datum A. A run is <b>accepted</b> when it meets both callouts: ⌖ true position (how close it came) and ⌒ profile of a line (how tightly it followed the street). A cafe <b>conforms to both</b> when enough of its runs are accepted.</p>
+      <p><a href="#about" id="about-link">About this project and its data sources ↓</a></p>
     </div>
     <div class="tblock" aria-label="Title block">
       <div>Engine</div><div>C++ → WebAssembly</div>
@@ -150,9 +161,67 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
     </div>
   </div>
 
+  <section class="about" id="about" aria-labelledby="about-h">
+    <h2 id="about-h">About this project</h2>
+    <div class="about-grid">
+      <section>
+        <h3>What this is</h3>
+        <p>A personal project. It lays every run I've recorded on my Garmin watch inside the City of Toronto over the city's cafes, and inspects the runs the way a machinist inspects parts. Each run is a <b>part</b>, the City's street centreline is the <b>drawing</b>, and each cafe is <b>datum A</b>.</p>
+        <p>The half-serious question it answers: which cafes do I run past again and again, and how tightly do I hold the line when I do? The data and a C++ geometry engine compiled to WebAssembly are both inside this one file, and nothing you do here is sent anywhere.</p>
+      </section>
+      <section>
+        <h3>Reading the map</h3>
+        <ul>
+          <li><b>Purple glow:</b> my runs, each drawn separately. Brighter means more runs overlap. Runs are never averaged together.</li>
+          <li><b>Pins:</b> one per cafe, coloured by status (see the legend under the map). Names appear when you zoom in.</li>
+          <li><b>Click a pin or a table row</b> to inspect a cafe:
+            <ul>
+              <li><b>Dashed grey circle:</b> the search radius R.</li>
+              <li><b>Blue dash-dot line:</b> the street centreline. The shaded strip around it is the profile band.</li>
+              <li><b>Runs:</b> green when accepted, red when rejected. The dots mark each run's closest point.</li>
+              <li><b>Red dashed circle:</b> the position zone.</li>
+            </ul>
+          </li>
+        </ul>
+      </section>
+      <section>
+        <h3>The two callouts</h3>
+        <div class="frame-row"><span class="fcf"><span><svg viewBox="0 0 16 16" aria-label="position"><circle cx="8" cy="8" r="4.5"/><path d="M8 1v14M1 8h14"/></svg></span><span>Ø50</span><span>A</span></span>
+          <span class="actual">the run must pass through a circle 50 m across, centred on the cafe. A run's Ø is twice its closest distance to the cafe.</span></div>
+        <div class="frame-row"><span class="fcf"><span><svg viewBox="0 0 16 16" aria-label="profile of a line"><path d="M2 12a6 6 0 0 1 12 0"/></svg></span><span>30</span><span>A</span></span>
+          <span class="actual">every GPS point must stay inside a 30 m strip centred on the street.</span></div>
+        <p>A run is <b>accepted</b> when it meets both callouts. A cafe <b>conforms to both</b> when its share of accepted runs reaches the acceptance yield (75% by default), from at least 3 runs.</p>
+        <ul>
+          <li><b>Each alone, not together:</b> each callout passes on its own, but they fail on different runs, so too few runs pass both.</li>
+          <li><b>Bias:</b> the average sideways offset on a street. "+4.1 m N" means I tend to run on the north side. The centreline runs down the middle of the road, so a run on the sidewalk sits a few metres off it by design.</li>
+        </ul>
+      </section>
+      <section>
+        <h3>Controls</h3>
+        <ul>
+          <li><b>Search radius R:</b> how far from a cafe a run still counts as passing it.</li>
+          <li><b>Position zone Ø</b> and <b>Profile band:</b> the two tolerances.</li>
+          <li><b>Acceptance yield:</b> the share of runs that must be accepted.</li>
+          <li><b>Year chips:</b> filter the runs.</li>
+          <li><b>Conform to both:</b> hides every other cafe.</li>
+          <li><b>Address bar:</b> follows your selection, so you can copy it to share a view.</li>
+        </ul>
+        <h3>What's left out</h3>
+        <p>Big chains and franchises, places tagged as cafes that aren't, cafes more than 300 m from any run, and anything outside the City of Toronto.</p>
+        <h3>Privacy</h3>
+        <p id="about-privacy"></p>
+      </section>
+    </div>
+    <section>
+      <h3>Data sources</h3>
+      <div class="tablewrap"><table id="sources"><tbody><tr><td class="muted">Loading…</td></tr></tbody></table></div>
+      <p class="hint" id="sources-note"></p>
+    </section>
+  </section>
+
   <footer>
     <span id="foot-mode"></span>
-    <span>Cafes © OpenStreetMap contributors (ODbL) · street centreline: City of Toronto Open Data · tiles © Esri</span>
+    <span>Cafes © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a> (ODbL) · street centreline: City of Toronto Open Data (Open Government Licence – Toronto) · tiles © Esri</span>
   </footer>
 </div>
 
@@ -181,9 +250,53 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
     ? "Public build: the first and last 500 m of every run and every privacy zone are removed before the data is compiled in."
     : "Private build: contains full GPS tracks. Do not publish this file.";
 
+  // ---------- about: scroll link (keeps the #cafe=... hash) and data sources ----------
+  $("about-link").addEventListener("click", e => { e.preventDefault(); $("about").scrollIntoView({ behavior: "smooth", block: "start" }); });
+  const PRIVACY_PUBLIC = "This public copy hides where I start and finish. The first and last 500 m of every run are removed, along with everything inside zones around places where many runs begin or end, and the zone centres are shifted at random. Cafes and streets near those zones are left out, and so are the names of the neighbourhoods I run in most. Before publishing, a check decodes the data inside this page and refuses to publish if anything falls inside a hidden zone.";
+  const PRIVACY_PRIVATE = "Private build: full GPS tracks, including where runs start and finish. Do not share this file.";
+  // display assets that are not part of the dataset
+  const PAGE_SOURCES = [
+    { data: "Map tiles (display only)", source: "Esri World Dark Gray Canvas", source_url: "https://www.esri.com/",
+      licence: "Esri terms of use", licence_url: "https://www.esri.com/en-us/legal/terms/full-master-agreement",
+      date_kind: "", date: "loaded live", detail: "Not part of the dataset." },
+    { data: "Map library", source: "Leaflet 1.9.4", source_url: "https://leafletjs.com/",
+      licence: "BSD-2-Clause", licence_url: "https://github.com/Leaflet/Leaflet/blob/main/LICENSE",
+      date_kind: "", date: "", detail: "Draws the map." },
+  ];
+  const httpsUrl = u => { try { const x = new URL(u); return x.protocol === "https:" ? x.href : null; } catch { return null; } };
+  const cell = (tr, text, url) => {
+    const td = tr.insertCell(), href = url && httpsUrl(url);
+    if (href) { const a = document.createElement("a"); a.href = href; a.rel = "noopener noreferrer"; a.textContent = text; td.append(a); }
+    else td.textContent = text;
+  };
+  function renderSources(meta) {  // DOM nodes only: metadata strings are never parsed as HTML
+    const t = $("sources"), str = v => (typeof v === "string" ? v : v == null ? "" : String(v));
+    t.replaceChildren();
+    const head = t.createTHead().insertRow();
+    ["Data", "Source", "Licence", "Date", "What is used"].forEach(h => { const th = document.createElement("th"); th.textContent = h; head.append(th); });
+    const body = t.createTBody();
+    (meta && Array.isArray(meta.sources) ? meta.sources : []).concat(PAGE_SOURCES).forEach(s => {
+      const tr = body.insertRow();
+      cell(tr, str(s.data)); cell(tr, str(s.source), s.source_url); cell(tr, str(s.licence), s.licence_url);
+      cell(tr, [str(s.date_kind), str(s.date)].filter(Boolean).join(": ")); cell(tr, str(s.detail));
+    });
+    $("sources-note").textContent = meta
+      ? `Recorded in the dataset when this page was built (${str(meta.built)}, ${str(meta.build)} build).`
+      : "This build carries no embedded source notes.";
+  }
+  $("about-privacy").textContent = MODE === "public" ? PRIVACY_PUBLIC : PRIVACY_PRIVATE;
+
   // ---------- the engine ----------
   const M = await CafeTol();
-  if (M._ct_init() !== 0) { $("detail").innerHTML = `<p>Engine failed to load: ${esc(M.UTF8ToString(M._ct_error()))}</p>`; return; }
+  if (M._ct_init() !== 0) {
+    $("detail").innerHTML = `<p>Engine failed to load: ${esc(M.UTF8ToString(M._ct_error()))}</p>`;
+    renderSources(null);
+    return;
+  }
+  let meta = null;
+  try { meta = JSON.parse(M.UTF8ToString(M._ct_meta()) || "null"); } catch { meta = null; }
+  renderSources(meta);
+  $("about-privacy").textContent = (M._ct_flags() & 1) ? PRIVACY_PUBLIC : PRIVACY_PRIVATE;  // what is actually compiled in
   const f64 = (p, n) => new Float64Array(M.HEAPF64.buffer, p, n);
   const f32 = (p, n) => new Float32Array(M.HEAPF32.buffer, p, n);
   const i32 = (p, n) => new Int32Array(M.HEAP32.buffer, p, n);

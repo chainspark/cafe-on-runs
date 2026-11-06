@@ -9,7 +9,9 @@ street centreline pieces near the cafes (the nominals); OSM cafes near the runs 
 emscripten Docker image -> a single self-contained HTML page (the wasm is inlined, so it works
 from file://).
 
-The generated .inc and the build output hold GPS data: both are gitignored.
+The dataset also carries provenance (sources, licences, dates, counts; never coordinates), which
+the page shows under "Data sources". The generated .inc and the build output hold GPS data: both
+are gitignored.
 """
 from __future__ import annotations
 
@@ -53,10 +55,16 @@ def _xy(lat, lon) -> np.ndarray:
 
 
 # ---------- inputs ----------
+def _read_cafe_cache() -> tuple[list[dict], dict]:
+    """(cafes, meta). The cache is {"meta": ..., "cafes": [...]}; an older bare list is still read."""
+    raw = json.loads(CAFES_CACHE.read_text(encoding="utf-8"))
+    return (raw, {}) if isinstance(raw, list) else (raw["cafes"], raw.get("meta") or {})
+
+
 def fetch_cafes(refresh: bool = False) -> list[dict]:
     """Every amenity=cafe in the City of Toronto bounding box, from OpenStreetMap (cached)."""
     if CAFES_CACHE.exists() and not refresh:
-        cached = json.loads(CAFES_CACHE.read_text(encoding="utf-8"))
+        cached, _ = _read_cafe_cache()
         if all("brand" in c for c in cached):
             return cached
         print("Cafe cache predates brand tags; refreshing it.")
@@ -67,7 +75,8 @@ def fetch_cafes(refresh: bool = False) -> list[dict]:
     print("Fetching cafes from OpenStreetMap (Overpass) ...")
     for attempt in range(3):
         try:
-            elements = json.load(urllib.request.urlopen(req, timeout=120))["elements"]
+            resp = json.load(urllib.request.urlopen(req, timeout=120))
+            elements = resp["elements"]
             break
         except Exception as ex:  # Overpass is busy now and then
             if attempt == 2:
@@ -81,10 +90,76 @@ def fetch_cafes(refresh: bool = False) -> list[dict]:
         cafes.append({"osm_id": el["id"] if el["type"] == "node" else -el["id"],  # ways negative
                       "name": tags.get("name") or "Unnamed cafe", "lat": lat, "lon": lon,
                       "brand": tags.get("brand") or tags.get("brand:en") or ""})
+    meta = {"endpoint": OVERPASS, "query": query,  # the query stays in this private cache, never in the page
+            "osm_base": (resp.get("osm3s") or {}).get("timestamp_osm_base", ""),
+            "retrieved": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
     DATA.mkdir(exist_ok=True)
-    CAFES_CACHE.write_text(json.dumps(cafes), encoding="utf-8")
-    print(f"  {len(cafes):,} cafes cached in {CAFES_CACHE}")
+    tmp = CAFES_CACHE.with_suffix(".part")
+    tmp.write_text(json.dumps({"meta": meta, "cafes": cafes}), encoding="utf-8")
+    tmp.replace(CAFES_CACHE)
+    print(f"  {len(cafes):,} cafes cached in {CAFES_CACHE} (OSM data as of {meta['osm_base'] or 'unknown'})")
     return cafes
+
+
+def _file_date(path: Path) -> str:
+    return dt.date.fromtimestamp(path.stat().st_mtime).isoformat()
+
+
+def _meta(public: bool, trim_m: float, runs: list[cafe_blob.Run], n_pts: int, n_fetched: int,
+          n_excluded: int, n_near: int, n_cafes: int, n_streets: int) -> dict:
+    """Provenance compiled into the dataset and shown on the page: sources, licences, dates, counts.
+
+    Never coordinates (privacy.COORD_LIKE is enforced here and again by privacy.check), never any
+    activities.json field other than dates, and for public builds no count that hints at the size
+    of the privacy zones.
+    """
+    from .opendata import source as street_source
+
+    dates = [dt.date(r.year, r.month, r.day) for r in runs]
+    years = f"{min(dates).year}–{max(dates).year}" if dates else "none"
+    run_detail = f"{len(runs):,} runs, {n_pts:,} GPS points, {years}, inside the City of Toronto."
+    if public:
+        run_detail += (f" Public build: the first and last {trim_m:.0f} m of every run and every point in a "
+                       "privacy zone removed.")
+    _, cmeta = _read_cafe_cache()
+    if cmeta.get("osm_base"):
+        c_kind, c_date = "OSM data as of", cmeta["osm_base"]
+    elif cmeta.get("retrieved"):
+        c_kind, c_date = "downloaded", cmeta["retrieved"]
+    else:
+        c_kind, c_date = "cached file date", _file_date(CAFES_CACHE)
+    cafe_detail = (f"{n_fetched:,} places tagged amenity=cafe in Toronto; {n_excluded:,} chains, franchises or "
+                   f"non-cafes excluded; ")
+    cafe_detail += f"{n_cafes:,} shown." if public else f"{n_near:,} within {R_MAX_M:.0f} m of a run, all shown."
+    st = street_source("toronto-centreline-tcl")
+    st_kind = "cached file date" if st.get("fallback") else "downloaded"
+    meta = {
+        "schema": 1,
+        "built": dt.date.today().isoformat(),
+        "build": "public" if public else "private",
+        "sources": [
+            {"id": "runs", "data": "Runs (GPS tracks)",
+             "source": "Garmin Connect, via the Garmin Connect Personal API", "source_url": "https://connect.garmin.com/",
+             "licence": "The author's own activity data; not licensed for reuse", "licence_url": "",
+             "date_kind": "runs through", "date": max(dates).isoformat() if dates else "", "detail": run_detail},
+            {"id": "cafes", "data": "Cafes (the datums)",
+             "source": "OpenStreetMap contributors, via the Overpass API",
+             "source_url": "https://www.openstreetmap.org/copyright",
+             "licence": "ODbL 1.0", "licence_url": "https://opendatacommons.org/licenses/odbl/1-0/",
+             "date_kind": c_kind, "date": c_date, "detail": cafe_detail},
+            {"id": "streets", "data": "Street centreline (the nominals)",
+             "source": "City of Toronto Open Data: Toronto Centreline (TCL)",
+             "source_url": "https://open.toronto.ca/dataset/toronto-centreline-tcl/",
+             "licence": "Open Government Licence – Toronto", "licence_url": "https://open.toronto.ca/open-data-licence/",
+             "date_kind": st_kind, "date": st.get("retrieved", ""),
+             "detail": f"{n_streets:,} centreline pieces ({', '.join(STREET_CLASSES)}) "
+                       f"within {R_MAX_M:.0f} m of a shown cafe."},
+        ],
+    }
+    text = json.dumps(meta, ensure_ascii=False)
+    if privacy.COORD_LIKE.search(text):
+        raise ValueError("provenance metadata must not contain coordinate-like numbers")
+    return meta
 
 
 def _tracks(public: bool, trim_m: float) -> pd.DataFrame:
@@ -178,12 +253,15 @@ def export(public: bool = False, trim_m: float = privacy.DEFAULT_TRIM_M, refresh
           f"{len(cafes):,} exported")
 
     streets = _streets(np.array([[c.lat, c.lon] for c in cafes]).reshape(-1, 2), forbidden, zones)
-    ds = cafe_blob.Dataset(cafe_blob.FLAG_PUBLIC if public else 0, runs, streets, cafes)
+    meta = _meta(public, trim_m, runs, len(pts), len(fetched), sum(dropped.values()), int(near_run.sum()),
+                 len(cafes), len(streets))
+    ds = cafe_blob.Dataset(cafe_blob.FLAG_PUBLIC if public else 0, runs, streets, cafes, meta)
     blob = cafe_blob.encode(ds)
     inc = WASM / "generated" / f"dataset_{target}.inc"
     cafe_blob.write_inc(blob, inc)
     print(f"Dataset ({target}): {len(runs)} runs, {len(pts):,} points, {len(streets):,} street pieces, "
-          f"{len(cafes):,} cafes -> {len(blob) / 1e6:.2f} MB")
+          f"{len(cafes):,} cafes, {len(json.dumps(meta, ensure_ascii=False).encode()):,} bytes of provenance "
+          f"-> {len(blob) / 1e6:.2f} MB")
     return inc
 
 
