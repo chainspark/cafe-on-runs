@@ -1,8 +1,19 @@
 # Cafe Tolerance
 
-How closely do my runs pass Toronto cafes? This project borrows two ideas from GD&T
-(geometric dimensioning and tolerancing) drawings and inspects my own Garmin runs with them.
-It produces one interactive page: a map of Toronto with my runs and every cafe I've run past.
+One self-contained web page that asks a half-serious question of my running data: **which Toronto
+cafes do I run past consistently, and how tightly do I hold the line when I do?** It treats my
+Garmin runs like machined parts and inspects them with two GD&T (geometric dimensioning and
+tolerancing) callouts. The street centreline is the drawing and each cafe is the datum.
+
+## What this project does
+
+1. **Collects** my runs from the Garmin Connect Personal API, every cafe in Toronto from
+   OpenStreetMap, and the street centreline from City of Toronto Open Data.
+2. **Packs** them into a compact binary dataset, along with notes on where each source came from.
+   Public builds are scrubbed first.
+3. **Compiles** that dataset into a C++20 geometry engine, built to WebAssembly.
+4. **Produces** one HTML file: a map of my runs and the cafes I pass, with sliders that re-run the
+   inspection live. It works from `file://` and fetches no data.
 
 | GD&T | On the run map |
 |---|---|
@@ -16,11 +27,43 @@ It produces one interactive page: a map of Toronto with my runs and every cafe I
 - **Accepted run:** meets both callouts at once.
 - **Conforms to both:** at least the acceptance yield (default 75%) of a cafe's runs are accepted, from at least 3 runs.
   - Other statuses: ⌖ only, ⌒ only, *each alone, not together* (both yields pass on their own, but the failures fall on different runs), neither, and too few runs.
-- **Bias:** each street also reports its mean signed offset, which shows which sidewalk I favour.
+- **Bias:** each street reports its mean signed offset, which shows which sidewalk I favour.
 
-Big chains and franchises (Tim Hortons, Starbucks, McDonald's/McCafé, Second Cup, the bubble-tea franchises, ...) and places tagged cafe that aren't (Tokyo Smoke) are left out. The list is in `src/cafe_tolerance/exclusions.py` and matches both the OSM name and `brand` tag. Small local multi-location roasters stay in.
+Runs are never merged or averaged, because the profile band exists to measure their spread. Big
+chains, franchises and places tagged cafe that aren't are excluded
+(`src/cafe_tolerance/exclusions.py`, matched by OSM name and `brand`). Small local multi-location
+roasters stay in.
 
-Runs are never merged or averaged. The profile band measures the spread between sidewalks and the GPS jitter.
+## Reading the page
+
+- **Glow:** every run, drawn additively. Brighter streets are run more often.
+- **Pins:** cafes coloured by status. Names appear from zoom 16. Click a pin or a table row to select a cafe.
+- **Selecting a cafe** draws its inspection on the map:
+  - the R circle
+  - the centreline (nominal) and its profile band
+  - each pass: green when the run is accepted, red when it isn't
+  - the closest-approach dots
+  - the Ø zone
+
+  The panel shows both feature control frames with actual values and yields, a per-street table with bias, and a histogram of Ø.
+- **Controls:**
+  - R (40–300 m), Ø (10–200 m), band (10–60 m) and acceptance (50–100%)
+  - year chips, "All / Conform to both", and search
+  - the URL hash `#cafe=<osm id>&show=both` reopens a view
+- **About this project**, at the bottom of the page, explains all of this in plain language and lists the data sources recorded in that build.
+
+## Data sources
+
+| Data | Source | Licence |
+|---|---|---|
+| Runs | Garmin Connect, via the Garmin Connect Personal API | My own data, not licensed for reuse |
+| Cafes | © OpenStreetMap contributors, via the Overpass API | ODbL 1.0 |
+| Street centreline | City of Toronto Open Data: Toronto Centreline (TCL) | Open Government Licence – Toronto |
+| Map tiles (display only) | Esri World Dark Gray Canvas | Esri terms |
+
+Each build embeds the dates and counts for these sources, and the page shows them under **Data
+sources**. File-by-file details, refresh commands and sensitivity are in
+[data/README.md](data/README.md).
 
 ## How it is built
 
@@ -87,4 +130,4 @@ The public build never shows where I live.
 
 `data/`, `output/`, `docs/`, `wasm/cafe_tol/generated/` and `wasm/cafe_tol/build/` hold GPS data. They are gitignored and never committed. Publishing is manual: run `publish`, review `docs/`, then commit it yourself.
 
-Cafe data © OpenStreetMap contributors (ODbL). Street centreline: City of Toronto Open Data. Map tiles © Esri.
+Attribution and licences: see [Data sources](#data-sources) above and [data/README.md](data/README.md).

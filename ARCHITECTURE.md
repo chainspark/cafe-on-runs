@@ -66,13 +66,16 @@ from `file://`.
 
 ### 3.1 Inputs and caches (all in `data/`, gitignored)
 
+Only `data/README.md` is tracked (`data/*` + `!data/README.md`). It documents every file below: its source, licence, refresh command and sensitivity.
+
 | Artifact | Produced by | Notes |
 |---|---|---|
 | `activities.json` | `fetch` | All sports. A run is any activity whose `typeKey` contains `running` |
 | `raw/<id>.zip` | `fetch` | Original FIT files. Written atomically. Runs without GPS are skipped |
 | `tracks.parquet` | `parse` | `activity_id, ts, lat, lon, distance_m, speed_ms, hr, alt_m` |
-| `cafes_osm.json` | `cafes.fetch_cafes` | `osm_id` (ways are stored negative), `name`, `lat`, `lon`, `brand` |
+| `cafes_osm.json` | `cafes.fetch_cafes` | `{"meta": {endpoint, query, osm_base, retrieved}, "cafes": [{osm_id (ways negative), name, lat, lon, brand}]}`. An older bare list is still read |
 | `opendata/*.geojson` | `opendata.download` | Street centreline and neighbourhood boundaries |
+| `opendata/*.source.json` | `opendata.download` | CKAN title, resource, last-modified and download date. `opendata.source()` falls back to the file date |
 | `privacy.json` | `privacy.zones` | Real zone centres and their random shifts. **Never publish this file.** Keep it stable |
 
 ### 3.2 Export (`cafes.export(public)`)
@@ -92,7 +95,8 @@ from `file://`.
 4. **Streets (the nominals).**
    - Keep centreline pieces of the runnable classes (Local, Collector, Minor/Major Arterial, Trail, Walkway) that come within 300 m of a kept cafe.
    - Public build only: drop pieces with any vertex inside a shifted zone, and pieces whose name contains a forbidden word.
-5. **Encode** with `cafe_blob.encode`, then write `wasm/cafe_tol/generated/dataset_<target>.inc` as a comma-separated byte list.
+5. **Provenance.** `cafes._meta` records build info and the three data sources, with their licences, dates and counts (§4). It raises if anything coordinate-like slips in.
+6. **Encode** with `cafe_blob.encode`, then write `wasm/cafe_tol/generated/dataset_<target>.inc` as a comma-separated byte list.
 
 Typical size (private build): 260 runs, 177k points, ~8.9k street pieces and ~570 cafes come
 to about 0.73 MB of dataset. The finished page is about 1.1 MB.
@@ -103,15 +107,16 @@ to about 0.73 MB of dataset. The finished page is about 1.1 MB.
 2. `cafes.build` inlines `build/cafe_tol_<target>.js` into `cafes.html`, escaping `</script`. It then writes `output/cafe_tolerance.html` for a private build, or `<out>/index.html` for a public one.
 3. `publish` runs the public build into `docs/`, then runs `privacy.check`.
 
-## 4. Dataset format: CAFETOL1
+## 4. Dataset format: CAFETOL1, version 2
 
 The format is little-endian. The writer is `cafe_blob.encode` (Python). The readers are
 `dataset.cpp` (C++) and `cafe_blob.decode` (Python, used by the privacy scan).
 
 ```
-magic      "CAFETOL1"                       8 bytes
-version    u32 = 1
+magic      "CAFETOL1"                       8 bytes, a fixed name (the 1 is not the version)
+version    u32 = 2                          1 is still accepted (no meta)
 flags      u32                              bit 0: public (scrubbed) build
+meta_len   u32, then utf8 JSON              v2 only; ≤ 64 KiB; provenance, see below
 n_runs     u32
   run:     i64 activity_id, u16 year, u8 month, u8 day, u16 n_parts, n_parts × coords
 n_streets  u32
@@ -124,7 +129,18 @@ coords     u32 n, then n × (zigzag-varint Δlat, zigzag-varint Δlon) in 1e-5°
 - **Small deltas:** points are about 5 m apart, so most deltas fit in one byte.
 - **Truncated input:** `decode` rejects it.
 - **Version mismatch:** the engine refuses to load the dataset.
-- **Changing the format:** bump `VERSION` in both `cafe_blob.py` and `dataset.hpp`, and update both readers and the round-trip test.
+- **Changing the format:** bump `VERSION`/`SUPPORTED_VERSIONS` in `cafe_blob.py` and `kVersion`/`kMinVersion` in `dataset.hpp`. Update both readers, `find_in_wasm`, and the round-trip and version tests.
+
+**Provenance meta** (`schema: 1`). It holds strings and integers only, and **never coordinates**: `cafes._meta` and `privacy.check` both reject any decimal with 3+ places.
+
+```json
+{"schema": 1, "built": "2026-11-06", "build": "public",
+ "sources": [{"id": "runs|cafes|streets", "data": "…", "source": "…", "source_url": "https://…",
+              "licence": "…", "licence_url": "https://…", "date_kind": "runs through|OSM data as of|downloaded|cached file date",
+              "date": "…", "detail": "counts in words"}]}
+```
+
+Public builds report only cafes found, excluded and shown. They give no near-run count, because the gap would hint at the size of the privacy zones.
 
 ## 5. The C++ engine
 
@@ -214,6 +230,7 @@ Strings are read with `UTF8ToString`.
 |---|---|
 | `ct_init()` | 0 on success. On failure, read the message with `ct_error()` |
 | `ct_flags()` | Dataset flags (bit 0 = public) |
+| `ct_meta()` | UTF-8 JSON provenance (§4); `""` for a v1 dataset |
 | `ct_run_count`, `ct_run_years`, `ct_run_ids` | Runs: i32 year[], f64 activity id[] |
 | `ct_point_count`, `ct_points` | f32 [lat, lon] × points (drawing only) |
 | `ct_part_count`, `ct_part_start`, `ct_part_run` | i32 offsets (n_parts + 1) and i32 run index per part |
@@ -249,6 +266,8 @@ When adding a function, mark it `EMSCRIPTEN_KEEPALIVE`, add it to the export lis
 | Selecting a cafe | `ct_detail` |
 
 - **URL hash:** `#cafe=<osm id>&show=both` selects a cafe and the filter on load, and the hash is updated on every selection. Use it to share a view or take screenshots.
+- **About this project:** a static section that explains the project in plain language. It must name no Toronto place but Toronto, because the forbidden-name scan matches substrings. The header's "About" link scrolls with `scrollIntoView`, so the `#cafe=…` hash is kept.
+- **Data sources:** a table rendered from `ct_meta()` with DOM nodes only. Metadata is never parsed as HTML, and only `https:` links are made. The tile and Leaflet rows are static, because they aren't part of the dataset.
 
 ## 8. GD&T model
 
@@ -293,11 +312,11 @@ text scan of the HTML can't see it. `privacy.check` therefore looks in both:
 
 1. **Page text:** every `[lat, lon]` pair, and every forbidden word.
 2. **Every embedded wasm module:**
-   1. Find each base64 run starting `AGFzbQ` (that's `\0asm`) and decode it.
+   1. Find each base64 run starting `AGFzbQ` (that's `\0asm`), whatever its length, and decode it. Even a tiny module could hide a coordinate pair.
    2. Rebuild the module's initial linear memory from its data section (`cafe_blob.wasm_memory_image`). The optimiser may split a static array into several segments, so the raw file can't simply be searched.
-   3. Find every `CAFETOL1` with a version-1 header. The decoder's own magic constant is also in memory, so it gets skipped.
+   3. Find every `CAFETOL1` with a supported (1 or 2) version header. The decoder's own magic constant is also in memory, so it gets skipped.
    4. Decode each dataset and zone-test **every run point, street point and cafe** against the *real* centres, shrunk by the maximum shift.
-   5. Scan all cafe and street names for forbidden words.
+   5. Scan all cafe and street names **and the provenance metadata**, both raw and with escaped spelling, for forbidden words. Also scan the metadata for `[lat, lon]` pairs. Any decimal with 3+ places in the metadata fails the check.
 
    **A wasm module without a readable dataset fails the check.** Anything published must be scannable.
 
@@ -324,7 +343,7 @@ The forbidden names are the 5 neighbourhoods with the most runs (`privacy.forbid
 - **Street identity is by name.** Two different streets with the same name inside one R would be treated as one feature. Unnamed trails and paths aren't in the centreline classes, so runs on them stay unmatched and are measured against the nearest named street.
 - **Sidewalk bias.** Centrelines run down the middle of the road, so runs carry a built-in offset of roughly half the road's width. The default band (30 m) allows for it, and the bias column reports it. A wide arterial can still fail a narrow band without the run being loose.
 - **Fixed projection and year range.** The projection is tuned to Toronto, and the year mask covers 2000–2031.
-- **Data freshness.** OSM data quality and the cache date limit what the cafe list can be: closed or mis-tagged cafes stay until `--refresh-cafes`, and some chains have no `brand` tag and are caught only by name.
+- **Data freshness.** The page shows each source's date (Data sources), so staleness is visible. The cafe list is only as good as OSM: closed or mis-tagged cafes stay until `--refresh-cafes`, and some chains have no `brand` tag and are caught only by name. Centreline files downloaded before provenance sidecars existed show their file date.
 - **Precision.** Page coordinates are float32 (~0.5 m), which is fine for drawing. All measurements are made in double precision in the engine.
 
 ## 12. Extending
@@ -335,5 +354,6 @@ The forbidden names are the 5 neighbourhoods with the most runs (`privacy.forbid
 | Matching thresholds | the constants in `match.hpp`. Add a test in `tests/test_gdt.cpp` |
 | A tolerance definition or status rule | `gdt.cpp` (`measure`, `parts_of`, `classify`), plus `cafes.html`, README.md and §8 above |
 | Engine outputs | `api.cpp`, the export list in `build.sh`, the readers in `cafes.html`, and §6 above |
-| The dataset format | `cafe_blob.py`, `dataset.{hpp,cpp}`, `VERSION` in both, and §4 above |
+| The dataset format | `cafe_blob.py` (`VERSION`, `SUPPORTED_VERSIONS`, `find_in_wasm`), `dataset.{hpp,cpp}` (`kVersion`, `kMinVersion`), tests, and §4 above |
+| Data-source notes | `cafes._meta` (embedded provenance), `opendata.source`, and `data/README.md` |
 | The public scrub | `cafes.export` and `privacy.py`. Never loosen `privacy.check`; fix the cause instead |
