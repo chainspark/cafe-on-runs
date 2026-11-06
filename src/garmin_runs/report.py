@@ -13,9 +13,10 @@ OUT = Path("output")
 DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
-def _tile(label: str, value: str, sub: str = "") -> str:
+def _tile(label: str, value: str, sub: str = "", wide: bool = False) -> str:
     sub_html = f'<div class="sub">{html.escape(sub)}</div>' if sub else ""
-    return f'<div class="tile"><div class="label">{label}</div><div class="value">{value}</div>{sub_html}</div>'
+    cls = "tile wide" if wide else "tile"
+    return f'<div class="{cls}"><div class="label">{label}</div><div class="value">{value}</div>{sub_html}</div>'
 
 
 def _table(head: list[str], rows: list[list[str]], num_cols: set[int] = frozenset()) -> str:
@@ -25,6 +26,24 @@ def _table(head: list[str], rows: list[list[str]], num_cols: set[int] = frozense
                          for i, c in enumerate(r)) + "</tr>"
         for r in rows)
     return f'<div class="tablewrap"><table><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table></div>'
+
+
+def _neighbourhoods() -> tuple[pd.DataFrame | None, int]:
+    """Toronto neighbourhood ranking (by runs); (None, 0) if the boundary data can't be loaded."""
+    try:
+        import shapely
+        from shapely.geometry import shape
+
+        from .neighbourhood import _download, _tracks, rank_neighbourhoods
+        feats = json.load(open(_download("neighbourhoods"), encoding="utf-8"))["features"]
+        hoods = [{"name": f["properties"]["AREA_NAME"], "geom": shape(f["geometry"])} for f in feats]
+        for h in hoods:
+            shapely.prepare(h["geom"])
+        t = _tracks()
+        return rank_neighbourhoods(t, hoods), t["activity_id"].nunique()
+    except Exception as e:  # offline on first run, etc. - the rest of the report still builds
+        print(f"  (neighbourhoods skipped: {e})")
+        return None, 0
 
 
 def build() -> Path:
@@ -58,6 +77,20 @@ def build() -> Path:
         _tile("Biggest week", f"{t['best_week_km']:.1f} km", f"week of {t['best_week']:%d %b %Y}"),
     ])
 
+    hoods, toronto_runs = _neighbourhoods()
+    if hoods is not None and not hoods.empty:
+        fav = hoods.iloc[0]
+        tiles += _tile("Favourite neighbourhood",
+                       f'<a class="tilelink" href="neighbourhood.html">{html.escape(fav["name"])}</a>',
+                       f"{int(fav['runs'])} of {toronto_runs} Toronto runs · {fav['km']:.0f} km", wide=True)
+        hoods_html = _table(
+            ["#", "Neighbourhood", "Runs", "km"],
+            [[i + 1, r["name"], int(r["runs"]), f"{r['km']:.0f}"] for i, r in hoods.head(5).iterrows()],
+            {0, 2, 3},
+        ) + '<p class="note"><a href="neighbourhood.html">Streets you prefer and avoid there →</a></p>'
+    else:
+        hoods_html = "<p class='muted'>Neighbourhood data unavailable (needs a one-time download from Toronto Open Data).</p>"
+
     best = s["best"]
     best_html = _table(
         ["Distance", "Time", "Pace", "Date"],
@@ -84,6 +117,7 @@ def build() -> Path:
 
     page = TEMPLATE.replace("__TILES__", tiles).replace("__BEST__", best_html) \
         .replace("__YEARLY__", yearly_html).replace("__RECENT__", recent_html) \
+        .replace("__HOODS__", hoods_html) \
         .replace("__DATA__", json.dumps(data))
     OUT.mkdir(exist_ok=True)
     path = OUT / "report.html"
@@ -113,10 +147,13 @@ h2{font-size:15px;margin:0 0 2px}
 .note{font-size:12px;margin:0 0 8px}
 header{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:20px}
 header a{color:var(--s1);font-weight:600;text-decoration:none}
-.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:12px;margin-bottom:16px}
+.tile.wide{grid-column:1/-1}
+@media (min-width:900px){.tiles{grid-template-columns:repeat(4,1fr)}.tile.wide{grid-column:span 2}}
 .tile,.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
 .tile .label{color:var(--ink2);font-size:12px}
 .tile .value{font-size:26px;font-weight:600;margin-top:4px}
+.tile .value a.tilelink{color:inherit;font-size:20px;text-decoration:underline;text-decoration-color:var(--axis);text-underline-offset:4px}
 .tile .sub{color:var(--muted);font-size:12px;margin-top:2px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,480px),1fr));gap:12px;margin-bottom:12px}
 .card.wide{margin-bottom:12px}
@@ -146,6 +183,7 @@ td{border-bottom:1px solid var(--grid);padding:6px 8px}
 <div class="grid">
  <div class="card"><h2>Best efforts</h2><p class="note">fastest stretch inside any run, from GPS</p>__BEST__</div>
  <div class="card"><h2>By year</h2><p class="note">&nbsp;</p>__YEARLY__</div>
+ <div class="card"><h2>Top neighbourhoods</h2><p class="note">Toronto, by number of runs passing through</p>__HOODS__</div>
 </div>
 <div class="card wide"><h2>Recent runs</h2>__RECENT__</div>
 </main>

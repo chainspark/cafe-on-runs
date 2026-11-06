@@ -66,6 +66,10 @@ def main() -> None:
                     help="ignore the first/last N metres of each run (privacy)")
     ar.set_defaults(func=lambda a: __import__("garmin_runs.runarea", fromlist=["build"]).build(a.buffer, a.trim_meters))
 
+    nb = sub.add_parser("neighbourhood", help="favourite Toronto neighbourhood and the streets you avoid in it")
+    nb.add_argument("--name", help="analyse this neighbourhood instead of the favourite (exact City name)")
+    nb.set_defaults(func=lambda a: __import__("garmin_runs.neighbourhood", fromlist=["build"]).build(a.name))
+
     al = sub.add_parser("all",help="fetch, parse, map, report")
     al.add_argument("--trim-meters", type=float, default=0)
 
