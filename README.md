@@ -1,2 +1,86 @@
-# garmin
-garmin data projects
+# Cafe Tolerance
+
+How closely do my runs pass Toronto cafes? This project borrows two ideas from GD&T
+(geometric dimensioning and tolerancing) drawings and inspects my own Garmin runs with them.
+It produces one interactive page: a map of Toronto with my runs and every cafe I've run past.
+
+| GD&T | On the run map |
+|---|---|
+| Drawing (nominal) | City of Toronto street centreline |
+| Datum A / basic dimension | the cafe (OpenStreetMap position) |
+| Part / lot | one run / all runs within R of the cafe |
+| Inspection (CMM) | the C++ engine, compiled to WebAssembly |
+
+- **⌖ True position:** Ø = 2 × the run's closest approach to the cafe. The run conforms when Ø ≤ the zone (default Ø50 m).
+- **⌒ Profile of a line:** the zone is a band centred on the street centreline (equally disposed). A run's actual profile is 2 × its largest sideways offset, counting every GPS point. It conforms when that is ≤ the band (default 30 m).
+- **Accepted run:** meets both callouts at once.
+- **Conforms to both:** at least the acceptance yield (default 75%) of a cafe's runs are accepted, from at least 3 runs.
+  - Other statuses: ⌖ only, ⌒ only, *each alone, not together* (both yields pass on their own, but the failures fall on different runs), neither, and too few runs.
+- **Bias:** each street also reports its mean signed offset, which shows which sidewalk I favour.
+
+Runs are never merged or averaged. The profile band measures the spread between sidewalks and the GPS jitter.
+
+## How it is built
+
+```
+Garmin Personal API ──► data/raw/*.zip ──► data/tracks.parquet
+OpenStreetMap (Overpass) ──► data/cafes_osm.json          ┐
+Toronto Open Data centreline ──► data/opendata/            ├─► cafes.py export ─► CAFETOL1 dataset
+                                                           ┘        │
+             wasm/cafe_tol/*.cpp  +  generated/dataset.inc ◄────────┘
+                         │  em++ (emscripten/emsdk Docker image, -sSINGLE_FILE)
+                         ▼
+            one self-contained HTML page (Leaflet + inlined wasm)
+```
+
+- **`wasm/cafe_tol/`** is the C++20 engine:
+  - `geom.hpp`: projection, distances, grid index
+  - `dataset.*`: decoder
+  - `match.*`: matches points to streets by distance and heading
+  - `gdt.*`: passes, parts, yields and status
+  - `api.cpp`: the WebAssembly interface
+  - `tests/`: synthetic tests
+- **The dataset is compiled into the binary:** `embedded.cpp` `#include`s the bytes `cafes.py` generates.
+- **Python** (`src/cafe_tolerance/`) does everything else: fetching, parsing, export, the Docker build, page assembly and privacy.
+
+## Setup
+
+- Python 3.12+ with [uv](https://docs.astral.sh/uv/): `uv sync`
+- Docker, to compile the C++. The first build pulls `emscripten/emsdk:4.0.10`.
+- A Garmin Personal API key, in **one** of these places. Never commit it.
+  - the environment variable `GARMIN_PERSONAL_API_KEY`
+  - the file `~/.config/garmin/connect-personal-api-key`
+
+## Commands
+
+```sh
+python -m cafe_tolerance fetch            # activity summaries + FIT files -> data/
+python -m cafe_tolerance parse            # FIT -> data/tracks.parquet
+python -m cafe_tolerance cafes            # private page -> output/cafe_tolerance.html
+python -m cafe_tolerance cafes --public   # privacy-scrubbed page
+python -m cafe_tolerance publish [--fetch] [--out docs]   # public page + privacy check
+```
+
+Run the C++ tests in the same image:
+
+```sh
+docker run --rm -v "$PWD/wasm/cafe_tol:/src" -w /src emscripten/emsdk:4.0.10 bash build.sh test
+```
+
+The URL hash `#cafe=<osm id>&show=both` opens the page on one cafe, with only the cafes that conform to both.
+
+## Privacy
+
+The public build never shows where I live.
+
+- **Trims and zones:**
+  - The first and last 500 m of every run are removed.
+  - Places where many runs start or finish become privacy zones, and every point inside them is removed.
+  - Zone centres are shifted at random, and the shifts are kept stable in `data/privacy.json`.
+- **Dropped cafes:** any cafe within a zone radius + 300 m, so no pass can touch a zone, and any street piece inside a zone.
+- **Dropped names:** the names of my most-run neighbourhoods never appear.
+- **The publish check:** `publish` scans the page text and also decodes the dataset compiled into the wasm, checking every coordinate and name. A wasm module without a readable dataset fails the check.
+
+`data/`, `output/`, `docs/`, `wasm/cafe_tol/generated/` and `wasm/cafe_tol/build/` hold GPS data. They are gitignored and never committed. Publishing is manual: run `publish`, review `docs/`, then commit it yourself.
+
+Cafe data © OpenStreetMap contributors (ODbL). Street centreline: City of Toronto Open Data. Map tiles © Esri.
