@@ -18,6 +18,8 @@ It produces one interactive page: a map of Toronto with my runs and every cafe I
   - Other statuses: ⌖ only, ⌒ only, *each alone, not together* (both yields pass on their own, but the failures fall on different runs), neither, and too few runs.
 - **Bias:** each street also reports its mean signed offset, which shows which sidewalk I favour.
 
+Big chains and franchises (Tim Hortons, Starbucks, McDonald's/McCafé, Second Cup, the bubble-tea franchises, ...) and places tagged cafe that aren't (Tokyo Smoke) are left out. The list is in `src/cafe_tolerance/exclusions.py` and matches both the OSM name and `brand` tag. Small local multi-location roasters stay in.
+
 Runs are never merged or averaged. The profile band measures the spread between sidewalks and the GPS jitter.
 
 ## How it is built

@@ -25,6 +25,7 @@ A GD&T-style tolerance analysis of the owner's Garmin runs past Toronto cafes.
 - **`cafes.export(public)`:**
   - **Tracks:** Toronto bounding box only (`opendata.TORONTO`). When public, `privacy.apply` runs first. Tracks are split into parts wherever there's a jump of more than 50 m (privacy holes or GPS gaps).
   - **Cafes:** OSM `amenity=cafe` from Overpass, cached in `data/cafes_osm.json` (`--refresh-cafes` re-fetches). Only cafes within 300 m (`R_MAX_M`) of a run are kept. Way ids are stored negative.
+  - **Exclusions:** `exclusions.py` drops big chains and franchises, plus non-cafes such as Tokyo Smoke, by normalised OSM `name` or `brand`. The cache stores `brand`, and an old cache without it is re-fetched. Keep small local multi-location roasters (Jimmy's, Dark Horse, Pilot, Balzac's, ...) unless the owner says otherwise. Audit for false positives after changing patterns.
   - **Streets:** centreline pieces (`opendata.STREET_CLASSES`) within 300 m of a kept cafe.
   - The output is `wasm/cafe_tol/generated/dataset_<private|public>.inc`, which is **gitignored because it holds GPS data**.
 - **`cafes.compile_wasm`** runs `build.sh <target>` in Docker and writes `wasm/cafe_tol/build/cafe_tol_<target>.js` (also gitignored), with the wasm inlined (`-sSINGLE_FILE`) so the page works from `file://`.

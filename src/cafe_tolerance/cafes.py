@@ -26,7 +26,7 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
 
-from . import cafe_blob, privacy
+from . import cafe_blob, exclusions, privacy
 from .fetch import DATA, SUMMARIES
 from .opendata import STREET_CLASSES, TORONTO, load
 from .parse import TRACKS
@@ -56,7 +56,10 @@ def _xy(lat, lon) -> np.ndarray:
 def fetch_cafes(refresh: bool = False) -> list[dict]:
     """Every amenity=cafe in the City of Toronto bounding box, from OpenStreetMap (cached)."""
     if CAFES_CACHE.exists() and not refresh:
-        return json.loads(CAFES_CACHE.read_text(encoding="utf-8"))
+        cached = json.loads(CAFES_CACHE.read_text(encoding="utf-8"))
+        if all("brand" in c for c in cached):
+            return cached
+        print("Cafe cache predates brand tags; refreshing it.")
     s, n, w, e = TORONTO[0], TORONTO[1], TORONTO[2], TORONTO[3]
     query = f'[out:json][timeout:90];(node["amenity"="cafe"]({s},{w},{n},{e});way["amenity"="cafe"]({s},{w},{n},{e}););out center tags;'
     req = urllib.request.Request(OVERPASS, data=urllib.parse.urlencode({"data": query}).encode(),
@@ -74,8 +77,10 @@ def fetch_cafes(refresh: bool = False) -> list[dict]:
     cafes = []
     for el in elements:
         lat, lon = (el["lat"], el["lon"]) if el["type"] == "node" else (el["center"]["lat"], el["center"]["lon"])
+        tags = el.get("tags") or {}
         cafes.append({"osm_id": el["id"] if el["type"] == "node" else -el["id"],  # ways negative
-                      "name": (el.get("tags") or {}).get("name") or "Unnamed cafe", "lat": lat, "lon": lon})
+                      "name": tags.get("name") or "Unnamed cafe", "lat": lat, "lon": lon,
+                      "brand": tags.get("brand") or tags.get("brand:en") or ""})
     DATA.mkdir(exist_ok=True)
     CAFES_CACHE.write_text(json.dumps(cafes), encoding="utf-8")
     print(f"  {len(cafes):,} cafes cached in {CAFES_CACHE}")
@@ -147,7 +152,18 @@ def export(public: bool = False, trim_m: float = privacy.DEFAULT_TRIM_M, refresh
     zones = privacy.zones() if public else None
     forbidden = privacy.forbidden_names() if public else []
 
-    raw = fetch_cafes(refresh_cafes)
+    fetched = fetch_cafes(refresh_cafes)
+    raw, dropped = [], {}
+    for c in fetched:  # no big chains / franchises, nothing that isn't really a cafe
+        hit = exclusions.excluded(c["name"], c.get("brand"))
+        if hit:
+            dropped[hit] = dropped.get(hit, 0) + 1
+        else:
+            raw.append(c)
+    for category in ("chain", "not a cafe"):
+        items = sorted(((n, label) for (cat, label), n in dropped.items() if cat == category), reverse=True)
+        if items:
+            print(f"Excluded ({category}): " + ", ".join(f"{label} {n}" for n, label in items))
     c_ll = np.array([[c["lat"], c["lon"]] for c in raw])
     near_run = np.isfinite(cKDTree(_xy(pts[:, 0], pts[:, 1])).query(_xy(c_ll[:, 0], c_ll[:, 1]),
                                                                      distance_upper_bound=R_MAX_M)[0])
@@ -157,7 +173,8 @@ def export(public: bool = False, trim_m: float = privacy.DEFAULT_TRIM_M, refresh
         keep &= ~privacy._hidden(c_ll[:, 0], c_ll[:, 1], grown, shifted=True)
         keep &= np.array([not any(w.lower() in c["name"].lower() for w in forbidden) for c in raw])
     cafes = [cafe_blob.Cafe(c["lat"], c["lon"], int(c["osm_id"]), c["name"]) for c, k in zip(raw, keep) if k]
-    print(f"Cafes: {len(raw):,} in Toronto, {int(near_run.sum()):,} within {R_MAX_M:.0f} m of a run, "
+    print(f"Cafes: {len(fetched):,} in Toronto, {len(raw):,} after exclusions, "
+          f"{int(near_run.sum()):,} within {R_MAX_M:.0f} m of a run, "
           f"{len(cafes):,} exported")
 
     streets = _streets(np.array([[c.lat, c.lon] for c in cafes]).reshape(-1, 2), forbidden, zones)
