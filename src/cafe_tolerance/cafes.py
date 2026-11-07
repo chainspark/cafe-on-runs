@@ -43,7 +43,7 @@ CAFES_CACHE = DATA / "cafes_osm.json"
 OVERPASS = "https://overpass-api.de/api/interpreter"
 USER_AGENT = "cafe-tolerance/0.1 (personal running analysis)"
 
-R_MAX_M = 300.0          # largest search radius the page offers; data beyond it is never needed
+R_MAX_M = 150.0          # largest search radius the page offers (keep in sync with the R slider); data beyond it is never needed
 GAP_M = 50.0             # a jump this long splits a track into parts (privacy holes, GPS dropouts)
 MIN_POINTS_IN_CITY = 20  # a run needs ~100 m inside Toronto to count
 LAT0 = 43.7

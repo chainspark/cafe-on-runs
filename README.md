@@ -52,7 +52,7 @@ roasters stay in.
 
   The panel shows both feature control frames with actual values and yields, a per-street table with bias, and a histogram of Ø.
 - **Controls:**
-  - R (40–300 m), Ø (10–200 m), band (10–60 m) and acceptance (50–100%)
+  - R (30–150 m), Ø (10–200 m, never more than 2R), band (10–60 m) and acceptance (50–100%)
   - year chips, "All / Conform to both", and search
   - the URL hash `#cafe=<osm id>&show=both` reopens a view
 - **Tooltips:** every parameter, column header, frame and status explains itself. Hover over it, focus it with the keyboard, or tap it on a phone. Each tip includes the default and range where there is one. The position zone and profile band tips also draw a small diagram, with one conforming run and one failing run, labelled with the current slider value and updated as the slider moves.
@@ -130,7 +130,7 @@ The public build never shows where I live.
   - The first and last 500 m of every run are removed.
   - Places where many runs start or finish become privacy zones, and every point inside them is removed.
   - Zone centres are shifted at random, and the shifts are kept stable in `data/privacy.json`.
-- **Dropped cafes:** any cafe within a zone radius + 300 m, so no pass can touch a zone, and any street piece inside a zone.
+- **Dropped cafes:** any cafe within a zone radius + 150 m (the largest R), so no pass can touch a zone, and any street piece inside a zone.
 - **Dropped names:** the names of my most-run neighbourhoods never appear.
 - **The publish check:** `publish` scans the page text and also decodes the dataset compiled into the wasm, checking every coordinate and name. A wasm module without a readable dataset fails the check.
 

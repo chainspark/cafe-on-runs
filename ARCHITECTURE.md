@@ -90,10 +90,10 @@ Only `data/README.md` is tracked (`data/*` + `!data/README.md`). It documents ev
 3. **Cafes.**
    - Load the Overpass cache.
    - Drop the excluded places: chains, franchises and non-cafes, matched by OSM name or brand.
-   - Keep cafes within `R_MAX_M` = 300 m of any run point. This is the largest R the page offers, so data beyond it is never needed.
-   - Public build only: also drop cafes within (shifted zone radius + 300 m) of any zone, and cafes whose name contains a forbidden word.
+   - Keep cafes within `R_MAX_M` = 150 m of any run point. This is the largest R the page offers, so data beyond it is never needed. Keep it in sync with the R slider's `max`.
+   - Public build only: also drop cafes within (shifted zone radius + R_MAX_M) of any zone, and cafes whose name contains a forbidden word.
 4. **Streets (the nominals).**
-   - Keep centreline pieces of the runnable classes (Local, Collector, Minor/Major Arterial, Trail, Walkway) that come within 300 m of a kept cafe.
+   - Keep centreline pieces of the runnable classes (Local, Collector, Minor/Major Arterial, Trail, Walkway) that come within R_MAX_M of a kept cafe.
    - Public build only: drop pieces with any vertex inside a shifted zone, and pieces whose name contains a forbidden word.
 5. **Provenance.** `cafes._meta` records build info and the three data sources, with their licences, dates and counts (§4). It raises if anything coordinate-like slips in.
 6. **Encode** with `cafe_blob.encode`, then write `wasm/cafe_tol/generated/dataset_<target>.inc` as a comma-separated byte list.
@@ -294,10 +294,20 @@ When adding a function, mark it `EMSCRIPTEN_KEEPALIVE`, add it to the export lis
 
 | Setting | Default | Range | Fixed constants |
 |---|---|---|---|
-| Search radius R | 75 m | 40–300 m | Match distance 25 m · heading 35° |
-| Position zone Ø | 50 m | 10–200 m | Blip length 4 points · stray search 300 m |
+| Search radius R | 75 m | 30–150 m | Match distance 25 m · heading 35° |
+| Position zone Ø | 50 m | 10–200 m, at most 2R | Blip length 4 points · stray search 300 m |
 | Profile band | 30 m | 10–60 m | Minimum runs 3 · minimum pass points 3 |
-| Acceptance yield | 75% | 50–100% | Track gap 50 m · R_MAX 300 m |
+| Acceptance yield | 75% | 50–100% | Track gap 50 m · R_MAX 150 m |
+
+**Why R is 30–150 m.** These figures were measured on the 572 cafes within 300 m of a run (Nov 2026).
+- **The lower end:**
+  - A cafe sits 11–50 m from its own street's centreline (median 14 m, p75 20 m, p90 32 m).
+  - Below 30 m, R doesn't cover the cafe's own street for many cafes, and a pass is only a few points long.
+- **The upper end:**
+  - The next parallel street with another name is 84 m away at the median (p75 111 m, p90 152 m).
+  - Of the runs R picks up, the share whose closest point is on the cafe's own street falls as R grows: 87% at 30 m, 76% at 75 m, 62% at 150 m, and 44% at 300 m.
+  - Past 150 m, R mostly adds runs on other streets.
+- **The cap on Ø:** Ø is capped at 2R, because at Ø = 2R every run within R conforms to ⌖ and the callout no longer tests anything.
 
 ## 9. Privacy architecture
 
@@ -306,7 +316,7 @@ Two builds come from the same code:
 | | Private (`cafes`) | Public (`cafes --public`, `publish`) |
 |---|---|---|
 | Tracks | Full | 500 m start/finish trim. Every point inside a privacy zone is removed |
-| Cafes | All within 300 m of a run | Also drops cafes within (shifted zone radius + 300 m) and forbidden names |
+| Cafes | All within 150 m of a run | Also drops cafes within (shifted zone radius + 150 m) and forbidden names |
 | Streets | All near kept cafes | Also drops pieces touching a shifted zone and forbidden names |
 | Output | `output/cafe_tolerance.html` | `docs/index.html` (reviewed and committed by hand) |
 | Check | none | `privacy.check` must pass, or the files are deleted |

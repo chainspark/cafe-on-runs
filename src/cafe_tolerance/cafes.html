@@ -14,7 +14,7 @@
   --chip-ok: #e1f2ea; --chip-bad: #f8e4df; --chip-mid: #e7ebf0;
   --map-bg: #1c2026; --map-ink: #e6ebf0; --map-label: #9aa4b0;
   --s-both: #4cc38a; --s-pos: #79a8ff; --s-prof: #b9a8ff; --s-apart: #f0b44c; --s-none: #ff8466; --s-few: #7e8996;
-  --tip-zone: #ff6d6d; --tip-ok: #4cc38a; --tip-bad: #f0b44c;  /* the tooltip is inverted (ink background) */
+  --tip-ok: #4cc38a; --tip-bad: #ff6d6d;  /* the tooltip is inverted (ink background) */
   --f-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
   --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --f-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
@@ -24,7 +24,7 @@
     --paper: #0f1318; --sheet: #151a20; --ink: #e2e8ee; --muted: #97a3b0; --rule: #2a323c;
     --accent: #74a3ff; --zone: #ff6d6d; --ok: #4cc38a; --bad: #ff8466; --amber: #f0b44c;
     --chip-ok: #143326; --chip-bad: #3a1d16; --chip-mid: #232a33;
-    --tip-zone: #cf3a3a; --tip-ok: #19805a; --tip-bad: #9a6a00;
+    --tip-ok: #19805a; --tip-bad: #cf3a3a;
     color-scheme: dark;
   }
 }
@@ -115,14 +115,15 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
 #tip .fig text { fill: currentColor }
 #tip .fig .fr, #tip .fig .dim { fill: none; stroke: currentColor; stroke-width: 1 }
 #tip .fig .nom { fill: none; stroke: currentColor; stroke-opacity: .7; stroke-width: 1.2; stroke-dasharray: 14 3 2 3 }
-#tip .fig .zone { fill: var(--tip-zone); fill-opacity: .16; stroke: var(--tip-zone); stroke-width: 1.4; stroke-dasharray: 5 3 }
-#tip .fig .zfill { fill: var(--tip-zone); fill-opacity: .16 }
-#tip .fig .zedge { stroke: var(--tip-zone); stroke-width: 1.4; stroke-dasharray: 5 3 }
+/* zones are neutral (the tip's own text colour); only the runs carry pass / fail colour */
+#tip .fig .zone { fill: currentColor; fill-opacity: .1; stroke: currentColor; stroke-opacity: .8; stroke-width: 1.4; stroke-dasharray: 5 3 }
+#tip .fig .zfill { fill: currentColor; fill-opacity: .1 }
+#tip .fig .zedge { stroke: currentColor; stroke-opacity: .8; stroke-width: 1.4; stroke-dasharray: 5 3 }
 #tip .fig .ok { fill: none; stroke: var(--tip-ok); stroke-width: 2; stroke-linejoin: round }
 #tip .fig .bad { fill: none; stroke: var(--tip-bad); stroke-width: 2; stroke-linejoin: round }
 #tip .fig .thin { stroke-width: 1; stroke-dasharray: 3 3 }
 #tip .fig .okt { fill: var(--tip-ok); font-weight: 600 } #tip .fig .badt { fill: var(--tip-bad); font-weight: 600 }
-#tip .fig .zt { fill: var(--tip-zone) }
+#tip .fig .zt { fill: currentColor; font-weight: 600 }
 #tip .fig .dot { fill: currentColor } #tip .fig .bdot { fill: var(--tip-bad) }
 /* GD&T annotations drawn on the map for the selected cafe (drawing-sheet style, light on the dark map) */
 .anno { pointer-events: none; font: 600 11px var(--f-mono); color: #18232e; white-space: nowrap }
@@ -176,7 +177,7 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
     <div class="panel">
       <div class="controls">
         <div class="ctl"><label for="r" data-tip="r">Search radius R</label><output id="r-out" for="r"></output>
-          <input type="range" data-tip="r" id="r" min="40" max="300" step="5" value="75"></div>
+          <input type="range" data-tip="r" id="r" min="30" max="150" step="5" value="75"></div>
         <div class="ctl"><label for="tol" data-tip="tol">Position zone Ø</label><output id="tol-out" for="tol"></output>
           <input type="range" data-tip="tol" id="tol" min="10" max="200" step="5" value="50"></div>
         <div class="ctl"><label for="band" data-tip="band">Profile band</label><output id="band-out" for="band"></output>
@@ -246,7 +247,7 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
           <li><b>Address bar:</b> follows your selection, so you can copy it to share a view.</li>
         </ul>
         <h3>What's left out</h3>
-        <p>Big chains and franchises, places tagged as cafes that aren't, cafes more than 300 m from any run, and anything outside the City of Toronto.</p>
+        <p>Big chains and franchises, places tagged as cafes that aren't, cafes more than 150 m from any run (the largest R), and anything outside the City of Toronto.</p>
         <h3>Privacy</h3>
         <p id="about-privacy"></p>
       </section>
@@ -291,8 +292,8 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
 
   // ---------- tooltips for every parameter and readout ----------
   const TIPS = {
-    "r": ["Search radius R", "How far from a cafe a run still counts as passing it. Each run's stretch inside this circle is a pass. A larger R also pulls in runs on nearby streets, which usually lowers the ⌖ yield.", "Default 75 m · range 40–300 m"],
-    "tol": ["Position zone Ø (⌖ true position)", "A circular tolerance zone centred on the cafe (datum A). A run's Ø is twice its closest approach to the cafe, and the run conforms when that Ø fits inside the zone.", "Default Ø50 m (within 25 m) · range Ø10–200 m", figPos],
+    "r": ["Search radius R", "How far from a cafe a run still counts as passing it. Each run's stretch inside this circle is a pass. Below 30 m R is narrower than many cafes' own street (a cafe sits 11–50 m from its centreline). Past 150 m it reaches the next parallel street for 9 in 10 cafes, so most of what it adds are runs on other streets.", "Default 75 m · range 30–150 m"],
+    "tol": ["Position zone Ø (⌖ true position)", "A circular tolerance zone centred on the cafe (datum A). A run's Ø is twice its closest approach to the cafe, and the run conforms when that Ø fits inside the zone.", "Default Ø50 m (within 25 m) · range Ø10–200 m, at most 2R (at Ø = 2R every run within R would conform)", figPos],
     "band": ["Profile band (⌒ profile of a line)", "The total width of a strip centred on the City street centreline. Every GPS point of a pass must stay inside it (±half the band). A run's actual is 2 × its largest sideways offset on its worst street.", "Default 30 m (±15 m) · range 10–60 m", figPro],
     "acc": ["Acceptance yield", "The share of a cafe's runs that must be accepted (meeting ⌖ and ⌒ at once) for the cafe to conform to both. A cafe needs at least 3 runs.", "Default 75% · range 50–100%"],
     "years": ["Years", "Include runs from these years only. Click a year to turn it off or on; at least one stays on. Tolerances are re-checked straight away."],
@@ -811,9 +812,16 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
     el.value = state[key];
     const upd = () => { state[key] = +el.value; out.textContent = fmt(state[key]); };
     upd();
-    el.addEventListener("input", () => { upd(); if (recut) M._ct_set_radius(state.R); refresh(); }); };
+    el.addEventListener("input", () => { upd(); if (recut) { M._ct_set_radius(state.R); capTol(); } refresh(); }); };
+  // the position zone can't be wider than the search circle: at Ø = 2R every run within R already conforms
+  function capTol() {
+    const el = $("tol"), max = Math.min(200, 2 * state.R);
+    el.max = max;
+    if (state.tol > max) { state.tol = max; el.value = max; $("tol-out").textContent = "Ø" + max + " m"; }
+  }
   bind("r", "R", v => v + " m", true);
   bind("tol", "tol", v => "Ø" + v + " m");
+  capTol();
   bind("band", "band", v => v + " m");
   bind("acc", "acc", v => v + "%");
   $("years").innerHTML = '<span class="eyebrow" data-tip="years">Years</span>' + years.map(y => `<button type="button" class="chipbtn" data-y="${y}" data-tip="years" aria-pressed="true">${y}</button>`).join("");

@@ -24,7 +24,7 @@ Run commands from the repository root as `python -m cafe_tolerance <command>`.
 Only a subset of this data is compiled into a page:
 
 - runs inside the City of Toronto
-- cafes within 300 m of a run, after the exclusions (`src/cafe_tolerance/exclusions.py`)
+- cafes within 150 m of a run (the largest search radius), after the exclusions (`src/cafe_tolerance/exclusions.py`)
 - the centreline pieces near those cafes
 - a short provenance record: sources, licences, dates and counts. It never contains coordinates,
   and the privacy check fails if any decimal with three or more places appears in it.
