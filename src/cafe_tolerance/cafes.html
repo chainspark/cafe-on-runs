@@ -5,79 +5,92 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Cafe Tolerance</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&family=Barlow:wght@400;500;600&family=B612+Mono:wght@400;700&family=Caveat:wght@600;700&display=swap">
 <style>
-/* An engineering drawing sheet: title block, the map as the main view, the inspection panel beside it. */
+/* A dark engineering drawing sheet: zone-marked border, title block, the map as the main view, the
+   inspection panel beside it. Checker's notes are written on it in a light-yellow pen. */
 :root {
-  --paper: #f2f4f6; --sheet: #fbfcfd; --ink: #18232e; --muted: #586574; --rule: #c7d0d9;
-  --accent: #2b64c9; --zone: #cf3a3a; --ok: #19805a; --bad: #b8432b; --amber: #9a6a00;
-  --chip-ok: #e1f2ea; --chip-bad: #f8e4df; --chip-mid: #e7ebf0;
+  --paper: #0c0f13; --sheet: #151a20; --ink: #e2e8ee; --ink-2: #c3ccd5; --muted: #97a3b0; --rule: #2a323c; --frame: #c3ccd5;
+  --accent: #74a3ff; --zone: #ff6d6d; --ok: #4cc38a; --bad: #ff8466; --amber: #f0b44c;
+  --chip-ok: #143326; --chip-bad: #3a1d16; --chip-mid: #232a33; --field: #11151a;
   --map-bg: #1c2026; --map-ink: #e6ebf0; --map-label: #9aa4b0;
   --s-both: #4cc38a; --s-pos: #79a8ff; --s-prof: #b9a8ff; --s-apart: #f0b44c; --s-none: #ff8466; --s-few: #7e8996;
-  --tip-ok: #4cc38a; --tip-bad: #ff6d6d;  /* the tooltip is inverted (ink background) */
-  --f-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
-  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --f-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #0f1318; --sheet: #151a20; --ink: #e2e8ee; --muted: #97a3b0; --rule: #2a323c;
-    --accent: #74a3ff; --zone: #ff6d6d; --ok: #4cc38a; --bad: #ff8466; --amber: #f0b44c;
-    --chip-ok: #143326; --chip-bad: #3a1d16; --chip-mid: #232a33;
-    --tip-ok: #19805a; --tip-bad: #cf3a3a;
-    color-scheme: dark;
-  }
+  --note: #fff0a0;  /* checker's notes: light yellow, apart from the reds of rejection and the purple of runs */
+  --tip-ok: #4cc38a; --tip-bad: #ff6d6d;
+  --f-display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "B612 Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --f-pen: "Caveat", "Segoe Print", cursive;
+  color-scheme: dark;
 }
 * { box-sizing: border-box }
 html, body { margin: 0 }
 body { background: var(--paper); color: var(--ink); font: 14px/1.55 var(--f-body);
-  padding: 20px max(16px, env(safe-area-inset-right)) 40px max(16px, env(safe-area-inset-left)) }
-.sheet { max-width: 1400px; margin: 0 auto; display: grid; gap: 18px }
+  padding: 20px max(12px, env(safe-area-inset-right)) 40px max(12px, env(safe-area-inset-left)) }
+/* the drawing border: zone numbers along the top and bottom, letters down the sides */
+.frame { max-width: 1440px; margin: 0 auto; display: grid; grid-template-columns: 22px minmax(0, 1fr) 22px; grid-template-rows: 22px auto 22px;
+  background: var(--sheet); border: 1px solid var(--muted); box-shadow: 0 12px 36px rgba(0,0,0,.55) }
+.zones { display: flex; justify-content: space-around; align-items: center; font: 500 11px var(--f-display); color: #8a96a3; user-select: none }
+.zones.h { grid-column: 2 } .zones.top { grid-row: 1 } .zones.bottom { grid-row: 3 }
+.zones.v { grid-row: 2; flex-direction: column } .zones.zl { grid-column: 1 } .zones.zr { grid-column: 3 }
+.sheet { grid-column: 2; grid-row: 2; border: 2px solid var(--frame); padding: 22px clamp(12px, 2.4vw, 28px); display: grid; gap: 18px; min-width: 0 }
+@media (max-width: 640px) { .frame { grid-template-columns: 0 minmax(0, 1fr) 0; grid-template-rows: 0 auto 0 } .zones { display: none } }
 h1, h2, h3 { font-family: var(--f-display); margin: 0; line-height: 1.15; text-wrap: balance }
-h1 { font-size: clamp(26px, 4vw, 40px); font-weight: 750; font-stretch: 78% }
-h3 { font-size: 17px; font-weight: 650; display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+h1 { font-size: clamp(30px, 4.6vw, 48px); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; line-height: 1 }
+h3 { font-size: 18px; font-weight: 600; letter-spacing: .02em; display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
 p { margin: 0; max-width: 75ch }
-.eyebrow { font: 500 11px/1 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted) }
+.eyebrow { font: 500 13px/1.2 var(--f-display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
+header .intro p.muted { color: var(--ink-2) }
 .muted { color: var(--muted) }
-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: end; border-bottom: 2px solid var(--ink); padding-bottom: 14px }
+header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: end; border-bottom: 2px solid var(--frame); padding-bottom: 14px }
 header .intro { display: grid; gap: 8px; min-width: 0 }
-.tblock { border: 1.5px solid var(--ink); display: grid; grid-template-columns: auto auto; font: 12px/1.3 var(--f-mono) }
+.tblock { border: 1.5px solid var(--frame); display: grid; grid-template-columns: auto auto; font: 12px/1.3 var(--f-mono) }
 .tblock div { padding: 5px 10px; border-bottom: 1px solid var(--rule) }
-.tblock div:nth-child(odd) { color: var(--muted); border-right: 1px solid var(--rule); text-transform: uppercase; letter-spacing: .08em; font-size: 10.5px }
+.tblock { background: var(--field) }
+.tblock div:nth-child(odd) { color: var(--muted); border-right: 1px solid var(--rule); text-transform: uppercase; letter-spacing: .08em; font: 500 13px var(--f-display) }
 .tblock div:nth-last-child(-n+2) { border-bottom: 0 }
 @media (max-width: 760px) { header { grid-template-columns: 1fr } .tblock { justify-self: start } }
 
-.app { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(320px, 1fr); border: 1.5px solid var(--ink); background: var(--sheet) }
+.app { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(320px, 1fr); border: 1.5px solid var(--frame); background: var(--sheet) }
 @media (max-width: 980px) { .app { grid-template-columns: minmax(0, 1fr) } }
 .left { display: grid; align-content: start; min-width: 0 }
 #map { height: min(72vh, 720px); min-height: 360px; background: var(--map-bg) }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 9px 12px; font: 11.5px var(--f-mono); color: var(--map-ink); background: var(--map-bg) }
 .legend span { display: inline-flex; align-items: center; gap: 6px }
-.legend i { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--map-ink) }
-.detail { padding: 16px 18px 18px; display: grid; gap: 10px; border-top: 1.5px solid var(--ink) }
-.panel { padding: 16px 18px; display: grid; gap: 14px; align-content: start; border-left: 1.5px solid var(--ink); min-width: 0 }
-@media (max-width: 980px) { .panel { border-left: 0; border-top: 1.5px solid var(--ink) } }
+.legend { font: 500 13px var(--f-display); letter-spacing: .02em }
+/* status symbols: shape as well as colour (● both, ◐ ⌖ only, ◑ ⌒ only, ◎ apart, ○ neither, · few) */
+.sym { width: 12px; height: 12px; flex: none; vertical-align: -1px; overflow: visible }
+.legend .pen, .notes .pen, .mark { font-family: var(--f-pen); color: var(--note) }
+.legend .pen { font-size: 18px; font-weight: 700; line-height: 1 }
+.mark { font-size: 17px; font-weight: 700; margin-right: 5px; line-height: 1; display: inline-block; text-decoration: none }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
+.notes { border-left: 2px solid var(--note); padding: 2px 0 2px 12px; display: grid; gap: 1px }
+.notes .eyebrow { color: var(--note) }
+.notes .pen { font-size: 21px; font-weight: 600; line-height: 1.2 }
+.detail { padding: 16px 18px 18px; display: grid; gap: 10px; border-top: 1.5px solid var(--frame) }
+.panel { padding: 16px 18px; display: grid; gap: 14px; align-content: start; border-left: 1.5px solid var(--frame); min-width: 0 }
+@media (max-width: 980px) { .panel { border-left: 0; border-top: 1.5px solid var(--frame) } }
 .controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px }
 @media (max-width: 420px) { .controls { grid-template-columns: minmax(0, 1fr) } }
 .ctl { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; min-width: 0 }
-.ctl label { font-size: 13px; font-weight: 500 }
+.ctl label { font: 500 14px var(--f-display) }
 .ctl output { font: 600 13px var(--f-mono); color: var(--accent); font-variant-numeric: tabular-nums }
 .ctl input { grid-column: 1 / -1; width: 100%; accent-color: var(--accent) }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
-.seg { display: inline-flex; border: 1.5px solid var(--ink) }
+.seg { display: inline-flex; border: 1.5px solid var(--frame) }
 .seg button, .chipbtn { font: 600 12px var(--f-mono); padding: 6px 11px; border: 0; background: var(--sheet); color: var(--ink); cursor: pointer }
-.seg button + button { border-left: 1.5px solid var(--ink) }
+.seg button + button { border-left: 1.5px solid var(--frame) }
 .seg button[aria-pressed="true"], .chipbtn[aria-pressed="true"] { background: var(--ink); color: var(--sheet) }
-.chipbtn { border: 1.5px solid var(--ink); padding: 4px 8px }
+.chipbtn { border: 1.5px solid var(--frame); padding: 4px 8px }
 button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
-#search { font: 13px var(--f-body); padding: 6px 8px; border: 1.5px solid var(--ink); background: var(--sheet); color: var(--ink); min-width: 0; flex: 1 }
+#search { font: 14px var(--f-body); padding: 7px 9px; border: 1.5px solid var(--frame); background: var(--field); color: var(--ink); min-width: 0; flex: 1 }
 .count { font: 13px var(--f-mono); color: var(--muted) }
 .count b { color: var(--ok); font-size: 16px }
 .tablewrap { overflow: auto }
 .tablewrap.tall { max-height: 460px; border-top: 1px solid var(--rule) }
 table { border-collapse: collapse; width: 100%; font-size: 13px }
 th, td { text-align: left; padding: 6px 7px; border-bottom: 1px solid var(--rule); vertical-align: middle }
-th { font: 500 10.5px var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); position: sticky; top: 0; background: var(--sheet) }
+th { font: 500 12px var(--f-display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); position: sticky; top: 0; background: var(--sheet) }
 td.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap }
 tr.sel td { background: color-mix(in srgb, var(--accent) 12%, transparent) }
 .linkbtn { font: 500 13px var(--f-body); color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-align: left; text-decoration: underline; text-underline-offset: 3px }
@@ -86,9 +99,10 @@ tr.sel td { background: color-mix(in srgb, var(--accent) 12%, transparent) }
 .chip.bad { background: var(--chip-bad); color: var(--bad) }
 .chip.mid { background: var(--chip-mid); color: var(--ink) }
 .chip.amber { background: var(--chip-mid); color: var(--amber) }
+.chip.st { background: var(--field); color: var(--ink); border: 1px solid #3a434e; display: inline-flex; gap: 6px; align-items: center; padding: 3px 7px }
 .frame-row { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center }
-.fcf { display: inline-flex; border: 1.5px solid var(--ink); font: 600 14px/1 var(--f-mono); background: var(--sheet) }
-.fcf > span { padding: 7px 10px; border-right: 1.5px solid var(--ink); display: flex; align-items: center }
+.fcf { display: inline-flex; border: 1.5px solid var(--frame); font: 600 14px/1 var(--f-mono); background: var(--field) }
+.fcf > span { padding: 7px 10px; border-right: 1.5px solid var(--frame); display: flex; align-items: center }
 .fcf > span:last-child { border-right: 0 }
 .fcf svg { width: 16px; height: 16px; stroke: var(--ink); fill: none; stroke-width: 1.6 }
 .actual { font: 12.5px var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums }
@@ -98,7 +112,7 @@ tr.sel td { background: color-mix(in srgb, var(--accent) 12%, transparent) }
 .hist .z { fill: var(--zone) } .hist .ok { fill: var(--ok) } .hist .bad { fill: var(--bad) }
 .hist .axis { stroke: var(--muted) } .hist .tol { stroke: var(--zone); stroke-dasharray: 5 4 }
 .status-line { font: 12px var(--f-mono); color: var(--muted) }
-footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f-mono); color: var(--muted); display: grid; gap: 4px }
+footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(--f-mono); color: var(--muted); display: grid; gap: 4px }
 .leaflet-container { font: 12px var(--f-body) }
 .leaflet-tooltip.cafe-tip { font: 600 11px var(--f-mono); background: #1c2026; color: #e6ebf0; border: 1px solid #3a424d; box-shadow: none }
 .leaflet-tooltip.cafe-tip::before { display: none }
@@ -106,8 +120,8 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
 /* tooltips: one floating element, positioned in the viewport so scrolling tables never clip it */
 .tipped { text-decoration: underline dotted; text-decoration-color: var(--muted); text-underline-offset: 3px; cursor: help }
 .fcf.tipped, .chip.tipped, svg.tipped { text-decoration: none }
-#tip { position: fixed; z-index: 2000; max-width: min(320px, calc(100vw - 16px)); background: var(--ink); color: var(--sheet);
-  font: 12.5px/1.45 var(--f-body); padding: 8px 10px; border-radius: 3px; box-shadow: 0 4px 14px rgba(0,0,0,.35); pointer-events: none }
+#tip { position: fixed; z-index: 2000; max-width: min(320px, calc(100vw - 16px)); background: #1b2129; color: var(--ink); border: 1.5px solid var(--muted);
+  font: 13px/1.45 var(--f-body); padding: 9px 11px; box-shadow: 0 8px 22px rgba(0,0,0,.55); pointer-events: none }
 #tip b { display: block; font-weight: 650; margin-bottom: 2px }
 #tip .def { font: 11.5px var(--f-mono); opacity: .8; margin-top: 5px }
 /* tooltip infographics: schematic, drawn in the tooltip's own (inverted) colours */
@@ -139,19 +153,28 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
 .anno .dim { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); background: rgba(28,32,38,.88); color: #f6f7f9; padding: 0 4px; border-radius: 2px; font-size: 10.5px }
 .toggle { display: inline-flex; gap: 6px; align-items: center; font-size: 13px }
 .toggle input { accent-color: var(--accent); width: 15px; height: 15px }
-.about { border: 1.5px solid var(--ink); background: var(--sheet); padding: 18px 20px 20px; display: grid; gap: 18px; scroll-margin-top: 12px }
-.about h2 { font-family: var(--f-display); font-size: 26px; font-weight: 720; font-stretch: 82%; margin: 0 }
-.about h3 { font-size: 15px }
+.about { border: 1.5px solid var(--frame); background: var(--sheet); padding: 18px 20px 20px; display: grid; gap: 18px; scroll-margin-top: 12px }
+.about h2 { font-family: var(--f-display); font-size: 22px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; margin: 0 }
+.about h3 { font-size: 15px; letter-spacing: .08em; text-transform: uppercase }
+.about { color: var(--ink-2) } .about b, .about h3 { color: var(--ink) }
+/* a checker's note written on the map next to the selected cafe */
+.anno.note .pen { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); font: 700 20px/1.1 var(--f-pen); color: var(--note);
+  white-space: nowrap; text-shadow: 0 0 3px #1c2026, 0 0 3px #1c2026, 0 0 6px #1c2026 }
 .about-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 18px 36px }
 .about section { display: grid; gap: 7px; align-content: start; min-width: 0 }
 .about ul { margin: 0; padding-left: 18px; display: grid; gap: 4px }
 .about p { max-width: 70ch }
 .about a, .intro a { color: var(--accent); text-underline-offset: 3px }
-.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--ink); vertical-align: -1px }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--frame); vertical-align: -1px }
 #sources td { vertical-align: top } #sources td:first-child { font-weight: 600; white-space: nowrap }
 </style>
 </head>
 <body>
+<div class="frame">
+<div class="zones h top" aria-hidden="true"><span>8</span><span>7</span><span>6</span><span>5</span><span>4</span><span>3</span><span>2</span><span>1</span></div>
+<div class="zones v zl" aria-hidden="true"><span>F</span><span>E</span><span>D</span><span>C</span><span>B</span><span>A</span></div>
+<div class="zones v zr" aria-hidden="true"><span>F</span><span>E</span><span>D</span><span>C</span><span>B</span><span>A</span></div>
+<div class="zones h bottom" aria-hidden="true"><span>8</span><span>7</span><span>6</span><span>5</span><span>4</span><span>3</span><span>2</span><span>1</span></div>
 <div class="sheet">
   <header>
     <div class="intro">
@@ -220,6 +243,7 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
               <li><b>Runs:</b> green when accepted, red when rejected. The dots mark each run's closest point.</li>
               <li><b>Red dashed circle:</b> the position zone.</li>
               <li><b>White callouts</b> (toggle "GD&amp;T annotations"): the datum A, a ⌖ frame for the position zone, and a ⌒ frame plus band-width dimension for each main street, each with the actual values, the way a drawing is annotated.</li>
+              <li><b>Yellow handwriting:</b> checker's notes, written only when a cafe's runs show something worth pointing out. A yellow ① in the table marks those cafes.</li>
             </ul>
           </li>
         </ul>
@@ -264,6 +288,7 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
     <span>Cafes © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a> (ODbL) · street centreline: City of Toronto Open Data (Open Government Licence – Toronto) · tiles © Esri</span>
   </footer>
 </div>
+</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
@@ -287,6 +312,18 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
   const $ = id => document.getElementById(id);
   const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+  // Status reads by shape as well as colour: ● both, ◐ ⌖ only, ◑ ⌒ only, ◎ apart, ○ neither, · few.
+  // The same shapes are drawn on the map pins (Pin below).
+  const ring = (c, w = 1.4) => `<circle cx="6" cy="6" r="4.4" style="fill:none;stroke:${c};stroke-width:${w}"/>`;
+  const SHAPES = [
+    c => `<circle cx="6" cy="6" r="5" style="fill:${c}"/>`,
+    c => ring(c) + `<path d="M6 1.6A4.4 4.4 0 0 0 6 10.4Z" style="fill:${c}"/>`,
+    c => ring(c) + `<path d="M6 1.6A4.4 4.4 0 0 1 6 10.4Z" style="fill:${c}"/>`,
+    c => ring(c) + `<circle cx="6" cy="6" r="1.8" style="fill:${c}"/>`,
+    c => ring(c, 1.8),
+    c => `<circle cx="6" cy="6" r="2" style="fill:${c}"/>`,
+  ];
+  const sym = s => `<svg class="sym" viewBox="0 0 12 12" aria-hidden="true">${SHAPES[s](`var(${STATUS[s].color})`)}</svg>`;
 
   $("foot-mode").textContent = MODE === "public"
     ? "Public build: the first and last 500 m of every run and every privacy zone are removed before the data is compiled in."
@@ -308,7 +345,8 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
     "col-pos": ["⌖ yield", "Share of runs whose closest approach gives Ø within the position zone. Green when it reaches the acceptance yield."],
     "col-pro": ["⌒ yield", "Share of runs whose worst pass stays inside the profile band. Green when it reaches the acceptance yield."],
     "col-both": ["Combined yield", "Share of runs accepted, meaning they meet ⌖ and ⌒ at once. This decides whether the cafe conforms to both."],
-    "col-status": ["Status", "Conforms to both, ⌖ only, ⌒ only, apart (each callout passes alone but on different runs), neither, or few (fewer than 3 runs)."],
+    "col-status": ["Status", "Conforms to both, ⌖ only, ⌒ only, apart (each callout passes alone but on different runs), neither, or few (fewer than 3 runs). A yellow ① marks a cafe with a checker's note."],
+    "notes": ["Checker's notes", "Written only when a cafe's runs show something worth pointing out: a run right at the door, a favoured side of the street, callouts that fail on different runs, a p95 just over the band, one or two detours, or every run accepted. At most three per cafe, and they change with the settings."],
     "frame-pos": ["⌖ | Ø | A: true position", "Read: each run must pass through a circle of this diameter centred on datum A, the cafe. The actual shows the best and median Ø and how many runs conform."],
     "frame-pro": ["⌒ | band: profile of a line", "Read: every GPS point must stay inside a strip of this width centred on the street. There is no datum: the band follows the street, and the cafe's R circle only picks which stretch is inspected. The actual shows the 95th-percentile run and how many runs conform."],
     "frame-both": ["Both callouts", "Runs accepted because they meet both callouts at once. This combined yield decides the cafe's status."],
@@ -516,7 +554,14 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
 
   // ---------- map ----------
   const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas";
-  const map = L.map("map", { preferCanvas: true, zoomControl: true, maxZoom: 19, fadeAnimation: false });
+  const map = L.map("map", { preferCanvas: true, zoomControl: true, maxZoom: 19, fadeAnimation: false, maxBoundsViscosity: 1 });
+  // Zoom-out stops where the view shows only the City of Toronto, and panning stays inside it.
+  // Keep in sync with opendata.TORONTO.
+  const CITY = L.latLngBounds([43.581, -79.639], [43.856, -79.115]);
+  map.setMaxBounds(CITY);
+  const capZoom = () => map.setMinZoom(map.getBoundsZoom(CITY, true));
+  capZoom();
+  map.on("resize", capZoom);
   const attr = "Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors";
   L.tileLayer(`${ESRI}/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`, { maxNativeZoom: 16, maxZoom: 19, attribution: attr }).addTo(map);
   L.tileLayer(`${ESRI}/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}`, { maxNativeZoom: 16, maxZoom: 19, pane: "overlayPane" }).addTo(map);
@@ -566,7 +611,30 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
   map.createPane("pins").style.zIndex = 620;
   const pinRenderer = L.canvas({ pane: "pins", padding: 0.3, tolerance: 6 });
   const LABEL_ZOOM = 16;  // from this zoom in, every shown cafe is labelled with its name
-  const pins = lls.map((ll, i) => L.circleMarker(ll, { renderer: pinRenderer, radius: 5, weight: 1.5, color: "#e6ebf0", fillOpacity: 1 })
+  // A cafe pin drawn as its status symbol (see SHAPES), on a dark halo; hit-testing stays the circle's.
+  const Pin = L.CircleMarker.extend({
+    _updatePath() {
+      const R = this._renderer;
+      if (!R._drawing || this._empty()) return;
+      const ctx = R._ctx, p = this._point, r = Math.max(Math.round(this._radius), 1), o = this.options, c = o.fillColor;
+      const disc = (rad, fill) => { ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, 2 * Math.PI); ctx.fillStyle = fill; ctx.fill(); };
+      const circ = (rad, w) => { ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, 2 * Math.PI); ctx.strokeStyle = c; ctx.lineWidth = w; ctx.stroke(); };
+      const half = from => { ctx.beginPath(); ctx.arc(p.x, p.y, r * .88, from, from + Math.PI); ctx.closePath(); ctx.fillStyle = c; ctx.fill(); };
+      ctx.save();
+      disc(r + 2.2, "rgba(28,32,38,.92)");
+      if (o.kind === 0) disc(r, c);
+      else if (o.kind === 5) disc(Math.max(2, r * .5), c);
+      else {
+        circ(r * .88, o.kind === 4 ? 2.2 : 1.7);
+        if (o.kind === 1) half(Math.PI / 2);        // ⌖ only: left half
+        if (o.kind === 2) half(-Math.PI / 2);       // ⌒ only: right half
+        if (o.kind === 3) disc(r * .38, c);         // apart: centre dot
+      }
+      if (o.sel) { ctx.beginPath(); ctx.arc(p.x, p.y, r + 3.5, 0, 2 * Math.PI); ctx.strokeStyle = o.color; ctx.lineWidth = 2; ctx.stroke(); }
+      ctx.restore();
+    },
+  });
+  const pins = lls.map((ll, i) => new Pin(ll, { renderer: pinRenderer, radius: 5, weight: 1.5, color: "#e6ebf0", fillOpacity: 1, kind: 0, sel: false })
     .bindTooltip(esc(cafeName[i]), { className: "cafe-tip", direction: "top", offset: [0, -6] })
     .on("click", () => select(i, false)));
   const overlay = L.layerGroup().addTo(map);
@@ -589,7 +657,53 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
     state.res = Array.from({ length: nCafes }, (_, i) => ({
       i, runs: r[7 * i], status: r[7 * i + 1], pos: r[7 * i + 2], pro: r[7 * i + 3], both: r[7 * i + 4], best: r[7 * i + 5], med: r[7 * i + 6] }));
   }
-  function detail(i) {
+  // Checker's notes: written only when a rule finds something worth saying about a cafe's runs, at most
+  // three, the most striking first. n = runs within R. Thresholds are set so that notes stay rare:
+  //   a run within 2 m of the cafe (n ≥ 10); ≥ 90% of ≥ 10 passes on one side of the main street;
+  //   status "apart"; ⌒ p95 over the band by ≤ 8 m while ≥ 80% of runs hold it (n ≥ 10);
+  //   exactly one run fails both callouts (n ≥ 15); every run accepted (n ≥ 10).
+  const NOTE_MIN_RUNS = 10;
+  function notesFor(r, d) {
+    const n = d.parts.length, out = [];
+    if (n < 3) return out;
+    const many = n >= NOTE_MIN_RUNS;
+    const bestD = Math.min(...d.parts.map(p => p.d));
+    if (many && bestD <= 2) out.push(`closest run came within ${Math.max(1, Math.round(bestD))} m of the door`);
+    const f = d.feats[0];
+    if (f && f.passes >= 10) {
+      const ps = d.passes.filter(p => streetName(p.name) === f.name), k = ps.filter(p => p.mean > 0).length, m = ps.length;
+      const ew = Math.abs(f.ny) >= Math.abs(f.nx);
+      if (m >= 10 && k / m >= .9) out.push(`${ew ? "north" : "west"} side of ${f.name} on ${k} of ${m} passes`);
+      else if (m >= 10 && k / m <= .1) out.push(`${ew ? "south" : "east"} side of ${f.name} on ${m - k} of ${m} passes`);
+    }
+    if (r.status === 3) out.push("each callout passes alone; they fail on different runs");
+    const prof = d.parts.map(p => p.prof).sort((a, b) => a - b), p95 = prof[Math.min(n - 1, Math.round(.95 * (n - 1)))];
+    const proN = d.parts.filter(p => p.pro).length;
+    if (many && p95 > state.band && p95 <= state.band + 8 && proN / n >= .8) out.push(`p95 ${p95.toFixed(0)} is just over the band: a few strays, not the line`);
+    const neither = d.parts.filter(p => !p.pos && !p.pro).length;
+    if (n >= 15 && neither === 1) out.push(`one run in ${n} misses both: a detour, not a drift`);
+    if (many && d.parts.every(p => p.pos && p.pro)) out.push(`all ${n} runs accepted`);
+    return out.slice(0, 3);
+  }
+  // The table's ① marks need every listed cafe's notes: worked out after the table is drawn, cached per setting.
+  const noteCache = new Map();
+  let noteKey = "", noteTimer = 0;
+  const settingsKey = () => [state.R, state.tol, state.band, state.acc, yearMask()].join(",");
+  // inside the name's button, in front of the name, so it never wraps onto a line of its own;
+  // the legend and the Status tip explain it
+  const MARK = `<span class="mark" aria-hidden="true">①</span><span class="vh">(checker's note) </span>`;
+  function markNotes() {
+    clearTimeout(noteTimer);
+    noteTimer = setTimeout(() => {
+      if (noteKey !== settingsKey()) { noteCache.clear(); noteKey = settingsKey(); }
+      $("cafes").querySelectorAll("button[data-i]").forEach(b => {
+        const i = +b.dataset.i;
+        if (!noteCache.has(i)) noteCache.set(i, notesFor(state.res[i], detail(i, false)).length);
+        if (noteCache.get(i) && !b.querySelector(".mark")) b.insertAdjacentHTML("afterbegin", MARK);
+      });
+    }, 150);
+  }
+  function detail(i, geometry = true) {
     const n = M._ct_detail(i);
     const P = f64(M._ct_detail_passes(), 9 * n);
     const passes = Array.from({ length: n }, (_, k) => ({ run: P[9 * k], name: P[9 * k + 1], start: P[9 * k + 2], end: P[9 * k + 3],
@@ -599,6 +713,7 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
     const nf = M._ct_detail_feature_count(), F = f64(M._ct_detail_features(), 9 * nf);
     const feats = Array.from({ length: nf }, (_, k) => ({ name: streetName(F[9 * k]), passes: F[9 * k + 1], pos: F[9 * k + 2], pro: F[9 * k + 3],
       both: F[9 * k + 4], p95: F[9 * k + 5], bias: F[9 * k + 6], nx: F[9 * k + 7], ny: F[9 * k + 8] }));
+    if (!geometry) return { passes, parts, feats };
     const polys = (count, startFn, dataFn) => {
       const c = count(); if (c <= 0) return [];
       const s = Int32Array.from(i32(startFn(), c + 1)), d = f32(dataFn(), 2 * s[c]);
@@ -614,15 +729,16 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
   const visible = r => state.show === "all" || r.status === 0;
   const pct = y => Math.round(100 * y) + "%";
   const ychip = (y, n) => n ? `<span class="chip ${y >= state.acc / 100 - 1e-9 ? "ok" : "bad"}">${pct(y)}</span>` : `<span class="chip mid">–</span>`;
-  const schip = (s, short) => `<span class="chip ${STATUS[s].chip}" data-tip="status-${s}">${esc(short ? STATUS[s].short : STATUS[s].label)}</span>`;
+  const schip = (s, short) => `<span class="chip st" data-tip="status-${s}">${sym(s)}${esc(short ? STATUS[s].short : STATUS[s].label)}</span>`;
 
   function drawPins() {
     const both = state.res.filter(r => r.status === 0).length;
     state.res.forEach(r => {
       const pin = pins[r.i], show = visible(r) || r.i === state.sel;
       if (!show) { if (map.hasLayer(pin)) pin.remove(); return; }
-      pin.setStyle({ fillColor: css(STATUS[r.status].color), radius: r.i === state.sel ? 8 : (r.status === 5 ? 3.5 : 5.5),
+      pin.setStyle({ fillColor: css(STATUS[r.status].color), kind: r.status, sel: r.i === state.sel, color: "#e6ebf0",
         weight: r.i === state.sel ? 2.5 : 1.2 });
+      pin.setRadius(r.i === state.sel ? 7.5 : (r.status === 5 ? 5 : 6));
       if (!map.hasLayer(pin)) pin.addTo(map);
       const permanent = map.getZoom() >= LABEL_ZOOM || (state.show === "both" && both <= 40);
       if (pin.getTooltip().options.permanent !== permanent) {
@@ -650,6 +766,7 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
     $("status-line").textContent = rows.length > shown.length ? `Showing the first ${shown.length} of ${rows.length}; search to narrow.` : "";
     $("cafes").querySelectorAll("button[data-i]").forEach(b => b.addEventListener("click", () => select(+b.dataset.i, true)));
     decorateTips($("cafes"));
+    markNotes();
   }
 
   function histogram(parts) {
@@ -683,7 +800,8 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
       L.circleMarker(p.q, { radius: 2.5, stroke: false, fillColor: 2 * p.d <= state.tol ? css("--s-both") : css("--s-none"), fillOpacity: 1, interactive: false }).addTo(overlay);
     });
     L.circle(c, { radius: state.tol / 2, color: "#ff6a6a", weight: 1.6, dashArray: "6 4", fill: false, interactive: false }).addTo(overlay);
-    lastDetail = { i, r, d };
+    const notes = notesFor(r, d);
+    lastDetail = { i, r, d, notes };
     drawAnnotations();
 
     const n = d.parts.length, posN = d.parts.filter(p => p.pos).length, proN = d.parts.filter(p => p.pro).length, bothN = d.parts.filter(p => p.pos && p.pro).length;
@@ -693,7 +811,10 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
       <h3>${esc(cafeName[i])} ${schip(r.status)}</h3>` +
       (n ? frame(SYM_POS, "Ø" + state.tol, `best Ø${r.best.toFixed(0)} · median Ø${r.med.toFixed(0)} · ${posN}/${n} runs`, r.pos, "frame-pos") +
            frame(SYM_PROF, state.band, `p95 ${p95.toFixed(1)} · ${proN}/${n} runs`, r.pro, "frame-pro") +
-           `<div class="frame-row"><span class="actual" data-tip="frame-both"><b>both callouts:</b> ${bothN}/${n} runs accepted</span>${ychip(r.both, n)}</div>
+           `<div class="frame-row"><span class="actual" data-tip="frame-both"><b>both callouts:</b> ${bothN}/${n} runs accepted</span>${ychip(r.both, n)}</div>` +
+           (notes.length ? `<div class="notes"><span class="eyebrow" data-tip="notes">Checker's notes</span>` +
+             notes.map((t, k) => `<span class="pen">${"①②③"[k]} ${esc(t)}</span>`).join("") + `</div>` : "") +
+           `
             <span class="hint">Counts are runs. A run that passes on two streets counts once: its closest approach for ⌖ and its worst pass for ⌒. The street table counts passes.</span>
             <div class="tablewrap"><table><thead><tr><th data-tip="st-street">Street (nominal)</th><th data-tip="st-passes">Passes</th><th data-tip="st-pos">⌖</th><th data-tip="st-pro">⌒</th><th data-tip="st-both">Both</th><th data-tip="st-p95">⌒ p95</th><th data-tip="st-bias">Bias</th></tr></thead><tbody>` +
            d.feats.map(f => `<tr><td>${esc(f.name)}</td><td class="num">${f.passes}</td><td class="num">${f.pos}</td><td class="num">${f.pro}</td><td class="num">${f.both}</td><td class="num">${f.p95.toFixed(1)}</td><td class="num">${side(f)}</td></tr>`).join("") +
@@ -797,6 +918,15 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
         act: `${esc(f.name)} · p95 ${f.p95.toFixed(1)} · <b class="${ok ? "ok" : "bad"}">${f.pro}/${f.passes}</b> passes` });
     });
     layoutCallouts(C, state.R * ppm + 30, callouts);
+
+    // the first checker's note, written above the R circle with a dashed leader down to the cafe
+    if (lastDetail.notes.length && state.R * ppm >= 30) {  // zoomed far out, the note would pile onto the callouts
+      let P = C.add(L.point(0, -(state.R * ppm) - 26));
+      const top = map.layerPointToContainerPoint(P).y;
+      if (top < 34) P = P.add(L.point(0, 34 - top));
+      annLine([P.add(L.point(0, 4)), C.add(L.point(0, -10))], { color: css("--note"), weight: 1.4, dashArray: "4 3" });
+      annHtml(P, `<div class="pen">① ${esc(lastDetail.notes[0])}</div>`, "note");
+    }
   }
 
   function select(i, pan) {
@@ -843,7 +973,8 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
   $("show-both").addEventListener("click", () => setShow("both"));
   $("search").addEventListener("input", e => { state.query = e.target.value; table(); });
   $("annot").addEventListener("change", e => { state.annot = e.target.checked; drawAnnotations(); });
-  $("legend").innerHTML = STATUS.map((s, k) => `<span data-tip="status-${k}"><i style="background:var(${s.color})"></i>${esc(s.label)}</span>`).join("");
+  $("legend").innerHTML = STATUS.map((s, k) => `<span data-tip="status-${k}">${sym(k)}${esc(s.label)}</span>`).join("") +
+    `<span class="pen" data-tip="notes">① checker's note</span>`;
   decorateTips($("legend"));
 
   // ---------- start ----------

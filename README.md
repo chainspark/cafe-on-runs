@@ -66,8 +66,11 @@ roasters stay in.
 
 ## Reading the page
 
+The page is a dark engineering drawing sheet: a zone-marked border, drawing lettering and a title block.
+
+- **Map:** zoom-out stops where the view shows only the City of Toronto, and panning stays inside it.
 - **Glow:** every run, drawn additively. Brighter streets are run more often.
-- **Pins:** cafes coloured by status. Names appear from zoom 16. Click a pin or a table row to select a cafe.
+- **Pins:** cafes drawn as status symbols, shape as well as colour: ● both, ◐ ⌖ only, ◑ ⌒ only, ◎ apart, ○ neither, · few. Names appear from zoom 16. Click a pin or a table row to select a cafe.
 - **Selecting a cafe** draws its inspection on the map:
   - the R circle
   - the centreline (nominal) and its profile band
@@ -81,6 +84,13 @@ roasters stay in.
     - for the top three streets, a band-width dimension and a `⌒ | 30` frame with the street's p95 actual and pass yield
 
   The panel shows both feature control frames with actual values and yields, a per-street table with bias, and a histogram of Ø.
+- **Checker's notes** (light-yellow handwriting): written only when a rule finds something worth pointing out, at most three per cafe. The first is also written on the map, and a ① in the table marks those cafes. The rules, with thresholds set so that about one cafe in eight gets a note:
+  - a run within 2 m of the cafe (from 10 runs)
+  - ≥ 90% of ≥ 10 passes on one side of the main street
+  - status "each alone, not together"
+  - ⌒ p95 over the band by at most 8 m, while ≥ 80% of runs hold it (from 10 runs)
+  - exactly one run failing both callouts (from 15 runs)
+  - every run accepted (from 10 runs)
 - **Controls:**
   - R (30–150 m), Ø (10–200 m, never more than 2R), band (10–60 m) and acceptance (50–100%)
   - year chips, "All / Conform to both", and search

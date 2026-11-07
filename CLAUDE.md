@@ -65,6 +65,11 @@ A GD&T-style tolerance analysis of the owner's Garmin runs past Toronto cafes.
 - **Forbidden names:** the top-5 neighbourhoods by run count (`privacy.forbidden_names`).
 - **`data/privacy.json` holds the real zone centres and the random shifts.** It was copied from garmin-runs so both sites hide the same places with the same shifts. Keep it stable, because deleting it re-rolls the shifts.
 
+## Page
+- One dark drawing-sheet theme. Checker's notes are light yellow (`--note`); keep that colour apart from the reds of rejection and the purple of runs.
+- The checker's-note rules live in `notesFor` in `cafes.html`. Keep them in sync with the README list.
+- The map's zoom limit copies `opendata.TORONTO` into `CITY`. Change both together.
+
 ## Visual check
 - Drive headless Edge over the DevTools protocol (`uv run --no-project --with websocket-client`), using a fresh `--user-data-dir` and waiting in real time so tiles load.
 - Edge's "Tracking Prevention blocked access to storage" warnings about unpkg are harmless.
