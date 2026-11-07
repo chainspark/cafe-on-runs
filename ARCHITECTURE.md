@@ -210,8 +210,25 @@ For each cafe:
 - **Drawing geometry:**
   - **nominals:** the centreline pieces used, densified to 5 m and clipped to R
   - **bands:** for each nominal, the ±band/2 polygon around it
+- **`geometry = false`** skips the drawing geometry. The notes use it.
+- **Feature order:** most passes first, ties by name id, so "the main street" is stable.
 
-### 5.6 Cost
+### 5.6 `Engine::notes(Detail, Settings)`: the checker's notes
+
+The engine owns the rules, their thresholds (`kNote*` in `gdt.hpp`) and the numbers. The page owns only the wording. The rules run in this order, and at most `kNoteMax` (3) notes are kept, most striking first:
+
+| Kind | Fires when | Values (a, b, c, street) |
+|---|---|---|
+| `kNoteDoor` (1) | a run within 2 m of the cafe, from 10 runs | closest approach |
+| `kNoteSide` (2) | ≥ 90% of ≥ 10 passes on the main street on one side | side (0 N, 1 S, 2 W, 3 E), passes on it, passes, street id |
+| `kNoteApart` (3) | status "each alone, not together" | none |
+| `kNoteNearBand` (4) | ⌒ p95 over the band by ≤ 8 m while ≥ 80% of runs hold it, from 10 runs | p95, runs holding, runs |
+| `kNoteOneDetour` (5) | exactly one run fails both callouts, from 15 runs | runs |
+| `kNoteAllAccepted` (6) | every run accepted, from 10 runs | runs |
+
+On the real data about one cafe in eight gets a note. `tests/test_gdt.cpp` covers each rule, its threshold and the cap.
+
+### 5.7 Cost
 
 - **`load`:** linear in points, with one grid lookup per point.
 - **`set_radius`:** one grid query per cafe, then work linear in the points inside R.
@@ -244,6 +261,8 @@ Strings are read with `UTF8ToString`.
 | `ct_detail_feature_count`, `ct_detail_features` | f64 × 9 per street: name id, passes, ⌖, ⌒, both, p95, bias, nx, ny |
 | `ct_detail_line_*`, `ct_detail_band_*` | Polylines and polygons: i32 offsets (count + 1), then f32 [lat, lon] pairs |
 | `ct_detail_line_names()` | i32 street name id per nominal line / band, which ties the ⌒ annotations to a street |
+| `ct_notes(i)`, `ct_notes_data()` | Number of checker's notes for cafe i, then f64 × 5 per note: kind, a, b, c, street id (§5.6). Uses the settings of the last `ct_evaluate` |
+| `ct_note_counts()` | i32 note count per cafe, for the table's ① marks. Uses the settings of the last `ct_evaluate` |
 
 When adding a function, mark it `EMSCRIPTEN_KEEPALIVE`, add it to the export list in
 `build.sh`, and document its buffer layout here.
@@ -275,7 +294,10 @@ When adding a function, mark it `EMSCRIPTEN_KEEPALIVE`, add it to the export lis
 
 - **Theme:** one dark drawing sheet (no light scheme): CSS tokens on `:root`, a `.frame` grid with zone markers around the `.sheet`, Barlow Semi Condensed lettering, Barlow body, B612 Mono values and Caveat for the checker's pen (`--note`, light yellow, kept apart from the reds of rejection and the purple of runs).
 - **Status symbols:** `SHAPES` draws each status as an SVG symbol for the legend and chips. `Pin` (a `L.CircleMarker` subclass) draws the same shapes on the canvas renderer, while hit-testing stays the circle's.
-- **Checker's notes:** `notesFor(r, d)` runs fixed rules on a cafe's detail (README lists them) and returns at most three. The selected cafe's notes go in the panel and the first one on the map, above the R circle (hidden when R is under 30 px). The table's ① marks call `detail(i, false)` for each listed cafe in a pass after the table is drawn, cached per setting. That variant skips the nominal and band geometry: about 11 ms for 510 cafes.
+- **Checker's notes:** the rules are in the engine (§5.6). The page holds only `NOTE_TEXT`, one sentence per kind, filled with the note's values.
+  - **Panel:** the selected cafe's notes come from `ct_notes`.
+  - **Map:** the first note is written above the R circle, and hidden when R is under 30 px.
+  - **Table:** the ① marks come from one `ct_note_counts` call, cached per setting.
 - **Zoom limit:** the map's `maxBounds` is the City of Toronto box (`opendata.TORONTO`, copied into the page), and `minZoom` is `getBoundsZoom(CITY, true)`, recomputed on resize, so the view never shows beyond the city.
 - **URL hash:** `#cafe=<osm id>&show=both` selects a cafe and the filter on load, and the hash is updated on every selection. Use it to share a view or take screenshots.
 - **Tooltips:** `data-tip` keys on every control, column header, frame and status point into one `TIPS` table. A single `position: fixed` element (`role=tooltip`, linked with `aria-describedby`) shows on mouse hover, keyboard focus or a tap, so scrolling tables never clip it. Escape or moving away hides it. Non-interactive anchors get a dotted underline and `tabindex=0`. A `TIPS` entry may carry a fourth item, a function returning an inline SVG infographic (`figPos`, `figPro`): a schematic zone or band, one conforming and one failing run, and a mini feature control frame, scaled to the current `state.tol` / `state.band`. The figures use `currentColor` for the zone and band and `--tip-ok` / `--tip-bad` for the runs. An `input` event redraws an open slider tip, and on touch a tap on a slider or its label shows the tip, because a tapped range input takes no focus.
@@ -377,6 +399,7 @@ The forbidden names are the 5 neighbourhoods with the most runs (`privacy.forbid
 | Matching thresholds | the constants in `match.hpp`. Add a test in `tests/test_gdt.cpp` |
 | A tolerance definition or status rule | `gdt.cpp` (`measure`, `parts_of`, `classify`), plus `cafes.html`, README.md and §8 above |
 | Engine outputs | `api.cpp`, the export list in `build.sh`, the readers in `cafes.html`, and §6 above |
+| A checker's-note rule or threshold | `Engine::notes` and the `kNote*` constants in `gdt.{hpp,cpp}`, a test, §5.6 and the README list. A new kind also needs its sentence in `NOTE_TEXT` in `cafes.html` |
 | The dataset format | `cafe_blob.py` (`VERSION`, `SUPPORTED_VERSIONS`, `find_in_wasm`), `dataset.{hpp,cpp}` (`kVersion`, `kMinVersion`), tests, and §4 above |
 | Data-source notes | `cafes._meta` (embedded provenance), `opendata.source`, and `data/README.md` |
 | The public scrub | `cafes.export` and `privacy.py`. Never loosen `privacy.check`; fix the cause instead |

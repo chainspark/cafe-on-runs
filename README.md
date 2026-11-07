@@ -22,7 +22,8 @@ crossing or a detour, and tolerances decide how much of that variation is accept
   - **Strays:** points that leave the street are measured against the pass's own street, so they count against the profile instead of being dropped.
   - **Signed offsets:** these use a canonical normal (+ north on east–west streets, + west on north–south ones), so a street's bias reads as a side of the street.
   - **Deterministic:** results are plain geometry with no fitted model, so the same data and settings always give the same answer.
-- **Tests:** 39 C++ checks, run in a pinned Emscripten Docker image (`bash build.sh test`).
+- **Checker's notes:** the C++ engine decides which facts about a cafe's runs are worth pointing out (`Engine::notes`); the page only words them.
+- **Tests:** 58 C++ checks, run in a pinned Emscripten Docker image (`bash build.sh test`).
 - **Python pipeline:**
   - reads FIT files, OpenStreetMap and City of Toronto open data
   - writes a versioned binary dataset (zigzag varints at 1e-5°, with a provenance header) that is compiled into the module
@@ -84,7 +85,7 @@ The page is a dark engineering drawing sheet: a zone-marked border, drawing lett
     - for the top three streets, a band-width dimension and a `⌒ | 30` frame with the street's p95 actual and pass yield
 
   The panel shows both feature control frames with actual values and yields, a per-street table with bias, and a histogram of Ø.
-- **Checker's notes** (light-yellow handwriting): written only when a rule finds something worth pointing out, at most three per cafe. The first is also written on the map, and a ① in the table marks those cafes. The rules, with thresholds set so that about one cafe in eight gets a note:
+- **Checker's notes** (light-yellow handwriting): written only when a rule finds something worth pointing out, at most three per cafe. The first is also written on the map, and a ① in the table marks those cafes. The C++ engine applies the rules (`Engine::notes`), and the page words them. The rules, with thresholds set so that about one cafe in eight gets a note:
   - a run within 2 m of the cafe (from 10 runs)
   - ≥ 90% of ≥ 10 passes on one side of the main street
   - status "each alone, not together"

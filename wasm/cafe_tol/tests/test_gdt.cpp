@@ -203,6 +203,124 @@ static void test_combined_yield() {
     CHECK(e.results()[0].runs == 0, "year filter removes runs from other years");
 }
 
+// ---- checker's notes ----
+static Part part(double d, double prof, const Settings& s) {
+    Part p;
+    p.d = d;
+    p.prof = prof;
+    p.pos = 2 * d <= s.tol_diam;
+    p.pro = prof <= s.band;
+    return p;
+}
+static Detail parts_detail(const std::vector<Part>& parts) {
+    Detail d;
+    d.parts = parts;
+    for (size_t k = 0; k < d.parts.size(); ++k) d.parts[k].run = int32_t(k);
+    return d;
+}
+// the main street (name 7, east-west) with `north` of `m` passes north of the centreline
+static void add_street(Detail& d, int north, int m) {
+    Feature f;
+    f.name = 7;
+    f.passes = m;
+    f.nx = 0;
+    f.ny = 1;
+    d.features.insert(d.features.begin(), f);
+    for (int k = 0; k < m; ++k) {
+        Pass p;
+        p.name = 7;
+        p.mean_off = k < north ? 4 : -4;
+        d.passes.push_back(p);
+    }
+}
+static bool has(const std::vector<Note>& ns, int kind) {
+    for (const auto& n : ns) if (n.kind == kind) return true;
+    return false;
+}
+
+static void test_notes_rules() {
+    const Settings s = settings(50, 30, 0.75);
+    std::vector<Part> good(10, part(10, 12, s));
+    CHECK(Engine::notes(parts_detail({part(1, 5, s), part(1, 5, s)}), s).empty(), "no notes under 3 runs");
+
+    auto door = good;
+    door[3] = part(1.5, 12, s);
+    auto ns = Engine::notes(parts_detail(door), s);
+    CHECK(!ns.empty() && ns[0].kind == kNoteDoor, "a run within 2 m of the cafe: door note, listed first");
+    NEAR(ns.empty() ? 0 : ns[0].a, 1.5, 1e-9, "... carrying the closest approach");
+    CHECK(has(ns, kNoteAllAccepted) && ns.back().a == 10, "all 10 runs accepted: all-accepted note with the run count");
+    door.pop_back();
+    CHECK(Engine::notes(parts_detail(door), s).empty(), "9 runs: below the minimum, so neither note");
+
+    Detail side = parts_detail(good);
+    add_street(side, 11, 12);
+    ns = Engine::notes(side, s);
+    CHECK(has(ns, kNoteSide), "11 of 12 passes on one side: side note");
+    for (const auto& n : ns)
+        if (n.kind == kNoteSide) CHECK(n.a == 0 && n.b == 11 && n.c == 12 && n.street == 7, "... north side, 11 of 12, on street 7");
+    Detail mixed = parts_detail(good);
+    add_street(mixed, 10, 12);
+    CHECK(!has(Engine::notes(mixed, s), kNoteSide), "10 of 12 (83%) is not one-sided enough");
+    Detail south = parts_detail(good);
+    add_street(south, 0, 12);
+    ns = Engine::notes(south, s);
+    for (const auto& n : ns)
+        if (n.kind == kNoteSide) CHECK(n.a == 1 && n.b == 12, "all 12 passes south: south side note");
+
+    std::vector<Part> apart(6, part(10, 12, s));                   // both
+    for (int k = 0; k < 2; ++k) apart.push_back(part(40, 12, s));  // ⌒ only
+    for (int k = 0; k < 2; ++k) apart.push_back(part(10, 50, s));  // ⌖ only
+    CHECK(has(Engine::notes(parts_detail(apart), s), kNoteApart), "80/80/60: each alone, not together");
+
+    std::vector<Part> near(9, part(10, 20, s));
+    near.push_back(part(10, 35, s));
+    ns = Engine::notes(parts_detail(near), s);
+    CHECK(has(ns, kNoteNearBand), "p95 35 over a 30 m band while 9 of 10 hold it: near-band note");
+    for (const auto& n : ns)
+        if (n.kind == kNoteNearBand) CHECK(n.a == 35 && n.b == 9 && n.c == 10, "... carrying p95, holding runs and runs");
+    near.back() = part(10, 40, s);
+    CHECK(!has(Engine::notes(parts_detail(near), s), kNoteNearBand), "p95 40 is more than 8 m over: no near-band note");
+
+    std::vector<Part> detour(14, part(10, 12, s));
+    detour.push_back(part(40, 50, s));
+    ns = Engine::notes(parts_detail(detour), s);
+    CHECK(has(ns, kNoteOneDetour) && !has(ns, kNoteAllAccepted), "one of 15 runs fails both: detour note");
+    detour.pop_back();
+    detour.pop_back();
+    detour.push_back(part(40, 50, s));
+    CHECK(!has(Engine::notes(parts_detail(detour), s), kNoteOneDetour), "14 runs: below the detour minimum");
+
+    // door + side + near band + detour: four rules fire, three notes are kept, in rule order
+    std::vector<Part> many(13, part(10, 20, s));
+    many.push_back(part(1, 34, s));
+    many.push_back(part(40, 50, s));
+    Detail four = parts_detail(many);
+    add_street(four, 15, 15);
+    ns = Engine::notes(four, s);
+    CHECK(ns.size() == 3 && ns[0].kind == kNoteDoor && ns[1].kind == kNoteSide && ns[2].kind == kNoteNearBand,
+          "at most three notes, most striking first");
+}
+
+static void test_notes_engine() {
+    // 10 runs on the north sidewalk, 1 m from the door of a cafe 7 m north of the centreline
+    Dataset ds;
+    ds.streets.push_back(street("Main St", -400, 0, 400, 0));
+    for (int i = 0; i < 10; ++i) ds.runs.push_back(run(line(-300, 6, 300, 6)));
+    ds.cafes.push_back(cafe(0, 7));
+    Engine e = engine(ds);
+    const Settings s = settings();
+    e.evaluate(s);
+    const auto ns = Engine::notes(e.detail(0, s, false), s);
+    CHECK(ns.size() == 3 && ns[0].kind == kNoteDoor && ns[1].kind == kNoteSide && ns[2].kind == kNoteAllAccepted,
+          "door, north side and all accepted from real passes");
+    CHECK(ns.size() > 1 && ns[1].a == 0 && ns[1].b == 10 && e.network().names[ns[1].street] == "Main St",
+          "... north side of Main St on 10 of 10 passes");
+    const Detail full = e.detail(0, s), lite = e.detail(0, s, false);
+    CHECK(lite.nominals.empty() && !full.nominals.empty() && lite.parts.size() == full.parts.size() &&
+              lite.features.size() == full.features.size(),
+          "detail without geometry has the same parts and features, and no drawing");
+}
+
 static void put_u32(std::vector<uint8_t>& b, size_t at, uint32_t v) {
     for (int k = 0; k < 4; ++k) b[at + k] = uint8_t(v >> (8 * k));
 }
@@ -242,6 +360,8 @@ int main() {
     test_turning_run_is_one_part();
     test_classify();
     test_combined_yield();
+    test_notes_rules();
+    test_notes_engine();
     std::printf("%d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }

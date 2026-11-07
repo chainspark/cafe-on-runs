@@ -192,7 +192,47 @@ void Engine::evaluate(const Settings& s) {
     }
 }
 
-Detail Engine::detail(int cafe, const Settings& s) const {
+std::vector<Note> Engine::notes(const Detail& d, const Settings& s) {
+    std::vector<Note> out;
+    const int n = int(d.parts.size());
+    if (n < kMinRuns) return out;
+    int pos = 0, pro = 0, both = 0, neither = 0;
+    double closest = INFINITY;
+    std::vector<double> prof;
+    for (const auto& p : d.parts) {
+        pos += p.pos;
+        pro += p.pro;
+        both += p.pos && p.pro;
+        neither += !p.pos && !p.pro;
+        closest = std::min(closest, p.d);
+        prof.push_back(p.prof);
+    }
+    const bool many = n >= kNoteMinRuns;
+    const int32_t status = classify(n, double(pos) / n, double(pro) / n, double(both) / n, s.acceptance);
+
+    if (many && closest <= kNoteDoorM) out.push_back({kNoteDoor, closest});
+    if (!d.features.empty() && d.features[0].passes >= kNoteSideMinPasses) {
+        const Feature& f = d.features[0];
+        int on = 0, m = 0;  // passes north (E-W street) or west (N-S street) of the centreline
+        for (const auto& p : d.passes)
+            if (p.name == f.name) { ++m; on += p.mean_off > 0; }
+        const bool ew = std::fabs(f.ny) >= std::fabs(f.nx);
+        if (m >= kNoteSideMinPasses && on >= kNoteSideShare * m)
+            out.push_back({kNoteSide, ew ? 0.0 : 2.0, double(on), double(m), f.name});
+        else if (m >= kNoteSideMinPasses && m - on >= kNoteSideShare * m)
+            out.push_back({kNoteSide, ew ? 1.0 : 3.0, double(m - on), double(m), f.name});
+    }
+    if (status == kApart) out.push_back({kNoteApart});
+    const double p95 = percentile(prof, 0.95);
+    if (many && p95 > s.band && p95 <= s.band + kNoteNearBandM && pro >= kNoteNearBandHold * n)
+        out.push_back({kNoteNearBand, p95, double(pro), double(n)});
+    if (n >= kNoteDetourMinRuns && neither == 1) out.push_back({kNoteOneDetour, double(n)});
+    if (many && both == n) out.push_back({kNoteAllAccepted, double(n)});
+    if (out.size() > size_t(kNoteMax)) out.resize(kNoteMax);
+    return out;
+}
+
+Detail Engine::detail(int cafe, const Settings& s, bool geometry) const {
     Detail d;
     if (cafe < 0 || size_t(cafe) >= passes_.size()) return d;
     const P c = cafe_xy_[cafe];
@@ -227,7 +267,11 @@ Detail Engine::detail(int cafe, const Settings& s) const {
         if (nl > 1e-9) { f.nx = nxs / nl; f.ny = nys / nl; }
         d.features.push_back(f);
     }
-    std::sort(d.features.begin(), d.features.end(), [](const Feature& a, const Feature& b) { return a.passes > b.passes; });
+    // most passes first; ties by name id, so "the main street" is the same on every call
+    std::sort(d.features.begin(), d.features.end(), [](const Feature& a, const Feature& b) {
+        return a.passes != b.passes ? a.passes > b.passes : a.name < b.name;
+    });
+    if (!geometry) return d;
 
     // Nominal centreline inside R and its equally disposed band, for drawing.
     const double half = s.band / 2;

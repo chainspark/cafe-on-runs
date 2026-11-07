@@ -24,6 +24,8 @@ std::vector<double> g_passes, g_parts, g_features;
 std::vector<int32_t> g_line_start, g_band_start;
 std::vector<float> g_lines, g_bands;
 std::vector<int32_t> g_line_names;
+std::vector<double> g_notes;          // 5 per note: kind, a, b, c, street name id
+std::vector<int32_t> g_note_counts;   // per cafe
 
 void flatten(const std::vector<std::vector<ct::LatLon>>& polys, std::vector<int32_t>& start, std::vector<float>& xy) {
     start.assign(1, 0);
@@ -121,5 +123,23 @@ EMSCRIPTEN_KEEPALIVE int ct_detail_band_count() { return int(g_band_start.size()
 EMSCRIPTEN_KEEPALIVE const int32_t* ct_detail_band_start() { return g_band_start.data(); }
 EMSCRIPTEN_KEEPALIVE const float* ct_detail_bands() { return g_bands.data(); }
 EMSCRIPTEN_KEEPALIVE const int32_t* ct_detail_line_names() { return g_line_names.data(); }  // street name id per line/band
+
+// Checker's notes for one cafe, with the settings of the last ct_evaluate; returns the note count.
+// The rules live in Engine::notes; the page turns each kind into words.
+EMSCRIPTEN_KEEPALIVE int ct_notes(int cafe) {
+    const auto notes = ct::Engine::notes(g_engine.detail(cafe, g_settings, false), g_settings);
+    g_notes.clear();
+    for (const auto& n : notes) g_notes.insert(g_notes.end(), {double(n.kind), n.a, n.b, n.c, double(n.street)});
+    return int(notes.size());
+}
+EMSCRIPTEN_KEEPALIVE const double* ct_notes_data() { return g_notes.data(); }  // 5 per note
+// How many notes every cafe has (for the table's marks), with the settings of the last ct_evaluate.
+EMSCRIPTEN_KEEPALIVE const int32_t* ct_note_counts() {
+    const int n = int(g_engine.data().cafes.size());
+    g_note_counts.assign(n, 0);
+    for (int c = 0; c < n; ++c)
+        g_note_counts[c] = int32_t(ct::Engine::notes(g_engine.detail(c, g_settings, false), g_settings).size());
+    return g_note_counts.data();
+}
 
 }  // extern "C"

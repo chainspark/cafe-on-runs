@@ -47,6 +47,7 @@ A GD&T-style tolerance analysis of the owner's Garmin runs past Toronto cafes.
   - few (< 3 runs)
 - **Offsets use a canonical normal:** + is north for E–W streets and west for N–S streets, so the bias can be read as a side of the street.
 - **Year filter:** a bitmask with bit (year − 2000).
+- **Checker's notes** (`Engine::notes`, `kNote*` constants): the C++ owns the rules, thresholds and numbers. The page's `NOTE_TEXT` owns only the wording, one sentence per kind.
 
 ## Privacy
 - `data/`, `output/` and `docs/` are gitignored. **Never commit or publish them, `generated/` or `build/`.** The one exception is `data/README.md` (`data/*` + `!data/README.md`): notes on the data sources with no data in them. Keep it current when inputs change.
@@ -67,7 +68,7 @@ A GD&T-style tolerance analysis of the owner's Garmin runs past Toronto cafes.
 
 ## Page
 - One dark drawing-sheet theme. Checker's notes are light yellow (`--note`); keep that colour apart from the reds of rejection and the purple of runs.
-- The checker's-note rules live in `notesFor` in `cafes.html`. Keep them in sync with the README list.
+- A new note kind needs a sentence in `NOTE_TEXT`. Rule changes go in C++ (see GD&T model) and the README list.
 - The map's zoom limit copies `opendata.TORONTO` into `CITY`. Change both together.
 
 ## Visual check

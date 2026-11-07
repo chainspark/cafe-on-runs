@@ -657,53 +657,38 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
     state.res = Array.from({ length: nCafes }, (_, i) => ({
       i, runs: r[7 * i], status: r[7 * i + 1], pos: r[7 * i + 2], pro: r[7 * i + 3], both: r[7 * i + 4], best: r[7 * i + 5], med: r[7 * i + 6] }));
   }
-  // Checker's notes: written only when a rule finds something worth saying about a cafe's runs, at most
-  // three, the most striking first. n = runs within R. Thresholds are set so that notes stay rare:
-  //   a run within 2 m of the cafe (n ≥ 10); ≥ 90% of ≥ 10 passes on one side of the main street;
-  //   status "apart"; ⌒ p95 over the band by ≤ 8 m while ≥ 80% of runs hold it (n ≥ 10);
-  //   exactly one run fails both callouts (n ≥ 15); every run accepted (n ≥ 10).
-  const NOTE_MIN_RUNS = 10;
-  function notesFor(r, d) {
-    const n = d.parts.length, out = [];
-    if (n < 3) return out;
-    const many = n >= NOTE_MIN_RUNS;
-    const bestD = Math.min(...d.parts.map(p => p.d));
-    if (many && bestD <= 2) out.push(`closest run came within ${Math.max(1, Math.round(bestD))} m of the door`);
-    const f = d.feats[0];
-    if (f && f.passes >= 10) {
-      const ps = d.passes.filter(p => streetName(p.name) === f.name), k = ps.filter(p => p.mean > 0).length, m = ps.length;
-      const ew = Math.abs(f.ny) >= Math.abs(f.nx);
-      if (m >= 10 && k / m >= .9) out.push(`${ew ? "north" : "west"} side of ${f.name} on ${k} of ${m} passes`);
-      else if (m >= 10 && k / m <= .1) out.push(`${ew ? "south" : "east"} side of ${f.name} on ${m - k} of ${m} passes`);
+  // Checker's notes. The engine owns the rules, thresholds and numbers (Engine::notes, ct_notes);
+  // the page only words them. Each note is [kind, a, b, c, street] (see NoteKind in gdt.hpp).
+  const SIDES = ["north", "south", "west", "east"];
+  const NOTE_TEXT = {
+    1: n => `closest run came within ${Math.max(1, Math.round(n.a))} m of the door`,
+    2: n => `${SIDES[n.a]} side of ${streetName(n.street)} on ${n.b} of ${n.c} passes`,
+    3: () => "each callout passes alone; they fail on different runs",
+    4: n => `p95 ${n.a.toFixed(0)} is just over the band: a few strays, not the line`,
+    5: n => `one run in ${n.a} misses both: a detour, not a drift`,
+    6: n => `all ${n.a} runs accepted`,
+  };
+  function notesOf(i) {
+    const k = M._ct_notes(i), D = f64(M._ct_notes_data(), 5 * k), out = [];
+    for (let j = 0; j < k; j++) {
+      const n = { kind: D[5 * j], a: D[5 * j + 1], b: D[5 * j + 2], c: D[5 * j + 3], street: D[5 * j + 4] };
+      if (NOTE_TEXT[n.kind]) out.push(NOTE_TEXT[n.kind](n));
     }
-    if (r.status === 3) out.push("each callout passes alone; they fail on different runs");
-    const prof = d.parts.map(p => p.prof).sort((a, b) => a - b), p95 = prof[Math.min(n - 1, Math.round(.95 * (n - 1)))];
-    const proN = d.parts.filter(p => p.pro).length;
-    if (many && p95 > state.band && p95 <= state.band + 8 && proN / n >= .8) out.push(`p95 ${p95.toFixed(0)} is just over the band: a few strays, not the line`);
-    const neither = d.parts.filter(p => !p.pos && !p.pro).length;
-    if (n >= 15 && neither === 1) out.push(`one run in ${n} misses both: a detour, not a drift`);
-    if (many && d.parts.every(p => p.pos && p.pro)) out.push(`all ${n} runs accepted`);
-    return out.slice(0, 3);
+    return out;
   }
-  // The table's ① marks need every listed cafe's notes: worked out after the table is drawn, cached per setting.
-  const noteCache = new Map();
-  let noteKey = "", noteTimer = 0;
+  // The table's ① marks: one engine call counts every cafe's notes, cached per setting.
+  let noteCounts = null, noteKey = "";
   const settingsKey = () => [state.R, state.tol, state.band, state.acc, yearMask()].join(",");
   // inside the name's button, in front of the name, so it never wraps onto a line of its own;
   // the legend and the Status tip explain it
   const MARK = `<span class="mark" aria-hidden="true">①</span><span class="vh">(checker's note) </span>`;
   function markNotes() {
-    clearTimeout(noteTimer);
-    noteTimer = setTimeout(() => {
-      if (noteKey !== settingsKey()) { noteCache.clear(); noteKey = settingsKey(); }
-      $("cafes").querySelectorAll("button[data-i]").forEach(b => {
-        const i = +b.dataset.i;
-        if (!noteCache.has(i)) noteCache.set(i, notesFor(state.res[i], detail(i, false)).length);
-        if (noteCache.get(i) && !b.querySelector(".mark")) b.insertAdjacentHTML("afterbegin", MARK);
-      });
-    }, 150);
+    if (noteKey !== settingsKey()) { noteCounts = Int32Array.from(i32(M._ct_note_counts(), nCafes)); noteKey = settingsKey(); }
+    $("cafes").querySelectorAll("button[data-i]").forEach(b => {
+      if (noteCounts[+b.dataset.i] && !b.querySelector(".mark")) b.insertAdjacentHTML("afterbegin", MARK);
+    });
   }
-  function detail(i, geometry = true) {
+  function detail(i) {
     const n = M._ct_detail(i);
     const P = f64(M._ct_detail_passes(), 9 * n);
     const passes = Array.from({ length: n }, (_, k) => ({ run: P[9 * k], name: P[9 * k + 1], start: P[9 * k + 2], end: P[9 * k + 3],
@@ -713,7 +698,6 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
     const nf = M._ct_detail_feature_count(), F = f64(M._ct_detail_features(), 9 * nf);
     const feats = Array.from({ length: nf }, (_, k) => ({ name: streetName(F[9 * k]), passes: F[9 * k + 1], pos: F[9 * k + 2], pro: F[9 * k + 3],
       both: F[9 * k + 4], p95: F[9 * k + 5], bias: F[9 * k + 6], nx: F[9 * k + 7], ny: F[9 * k + 8] }));
-    if (!geometry) return { passes, parts, feats };
     const polys = (count, startFn, dataFn) => {
       const c = count(); if (c <= 0) return [];
       const s = Int32Array.from(i32(startFn(), c + 1)), d = f32(dataFn(), 2 * s[c]);
@@ -800,7 +784,7 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
       L.circleMarker(p.q, { radius: 2.5, stroke: false, fillColor: 2 * p.d <= state.tol ? css("--s-both") : css("--s-none"), fillOpacity: 1, interactive: false }).addTo(overlay);
     });
     L.circle(c, { radius: state.tol / 2, color: "#ff6a6a", weight: 1.6, dashArray: "6 4", fill: false, interactive: false }).addTo(overlay);
-    const notes = notesFor(r, d);
+    const notes = notesOf(i);
     lastDetail = { i, r, d, notes };
     drawAnnotations();
 
