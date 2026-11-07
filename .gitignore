@@ -1,0 +1,19 @@
+# Secrets
+.env
+*.key
+
+# Personal data and generated output (contains GPS traces of where I run).
+# data/README.md (notes on the data sources, no data) is the only tracked file in data/.
+data/*
+!data/README.md
+output/
+docs/
+
+# The C++ build embeds GPS data: never commit the generated dataset or the build output
+wasm/cafe_tol/generated/
+wasm/cafe_tol/build/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
