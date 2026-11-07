@@ -15,6 +15,7 @@
   --chip-ok: #143326; --chip-bad: #3a1d16; --chip-mid: #232a33; --field: #11151a;
   --map-bg: #1c2026; --map-ink: #e6ebf0; --map-label: #9aa4b0;
   --s-both: #4cc38a; --s-pos: #79a8ff; --s-prof: #b9a8ff; --s-apart: #f0b44c; --s-none: #ff8466; --s-few: #7e8996;
+  --run: #ff9f1a;   /* the selected run: orange, apart from the salmon of "neither" and the yellow of notes */
   --note: #fff0a0;  /* checker's notes: light yellow, apart from the reds of rejection and the purple of runs */
   --tip-ok: #4cc38a; --tip-bad: #ff6d6d;
   --f-display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
@@ -65,6 +66,30 @@ header .intro { display: grid; gap: 8px; min-width: 0 }
 .mark { font-size: 17px; font-weight: 700; margin-right: 5px; line-height: 1; display: inline-block; text-decoration: none }
 .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
 [hidden] { display: none !important }
+/* two views of one drawing: the cafe view (datum, blue) and the run view (part, white) */
+.viewbar { display: flex; flex-wrap: wrap; border-bottom: 1.5px solid var(--frame); background: var(--sheet) }
+.viewbar button { display: flex; align-items: center; gap: 8px; padding: 9px 14px; border: 0; border-right: 1.5px solid var(--frame); background: var(--sheet);
+  color: var(--ink-2); cursor: pointer; font: 600 14px var(--f-display); letter-spacing: .08em; text-transform: uppercase }
+.viewbar button span { font-weight: 400; letter-spacing: .04em; text-transform: none; opacity: .85 }
+.viewbar button::before { content: ""; width: 10px; height: 10px; background: var(--accent) }
+#view-run::before { background: #f6f7f9 }
+#view-cafe[aria-selected="true"] { background: var(--accent); color: #0c0f13 }
+#view-run[aria-selected="true"] { background: #f6f7f9; color: #0c0f13 }
+.viewbar button[aria-disabled="true"] { color: #5b6672; cursor: not-allowed }
+.viewctx { flex: 1 1 200px; display: flex; align-items: center; justify-content: flex-end; padding: 6px 14px; font: 12px var(--f-mono); color: var(--ink-2); text-align: right }
+.mapwrap { position: relative; border-top: 3px solid var(--accent) }
+.mapwrap.run { border-top-color: #f6f7f9 }
+.view-label { position: absolute; left: 10px; bottom: 10px; z-index: 1000; padding: 3px 8px; background: rgba(12,15,19,.85); border: 1.5px solid var(--accent);
+  color: var(--accent); font: 600 13px var(--f-display); letter-spacing: .1em; pointer-events: none }
+.mapwrap.run .view-label { border-color: #f6f7f9; color: #f6f7f9 }
+.back-run { position: absolute; right: 10px; top: 10px; z-index: 1000; padding: 6px 10px; border: 1.5px solid #f6f7f9; background: rgba(12,15,19,.9);
+  color: #f6f7f9; cursor: pointer; font: 12px var(--f-mono) }
+.leaflet-control-fit a { font: 17px/30px var(--f-mono); text-align: center; cursor: pointer }
+.run-end { display: inline-block; transform: translate(-50%, -50%); min-width: 20px; padding: 0 3px; box-sizing: border-box; border: 2px solid var(--run); background: #0c0f13;
+  color: var(--run); font: 700 10px/16px var(--f-mono); text-align: center }
+.legend .runline { display: inline-block; width: 22px; height: 0; border-top: 2.6px solid var(--run); vertical-align: middle }
+.legend .badge { display: inline-flex; width: 16px; height: 16px; border-radius: 50%; box-sizing: border-box; align-items: center; justify-content: center; font: 700 9.5px var(--f-mono) }
+.legend .faintdot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid #97a3b0 }
 /* run inspection: panel tabs, the run report, the map picker and the highlighted run */
 .tabs { display: flex; border: 1.5px solid var(--frame) }
 .tabs button { flex: 1; padding: 8px; border: 0; cursor: pointer; font: 600 14px var(--f-display); letter-spacing: .08em; text-transform: uppercase; background: var(--sheet); color: var(--ink) }
@@ -98,7 +123,7 @@ tr.clickable { cursor: pointer } tr.clickable:hover td { background: color-mix(i
 .run-picker button { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; width: 100%; text-align: left; padding: 6px 10px; border: 0; border-bottom: 1px solid var(--rule); background: transparent; color: var(--ink); cursor: pointer; font: 13px var(--f-body) }
 .run-picker button:hover, .run-picker button:focus-visible { background: color-mix(in srgb, var(--accent) 14%, transparent) }
 .run-picker .sub { font-size: 12px; color: var(--muted) } .run-picker .r { font: 11.5px var(--f-mono); color: var(--muted); text-align: right }
-.run-arrow { width: 0; height: 0; border-left: 9px solid #f6f7f9; border-top: 5px solid transparent; border-bottom: 5px solid transparent; transform-origin: 50% 50% }
+.run-arrow { width: 0; height: 0; border-left: 9px solid var(--run); border-top: 5px solid transparent; border-bottom: 5px solid transparent; transform-origin: 50% 50% }
 .run-dia { font: 600 10px var(--f-mono); padding: 0 4px; background: rgba(28,32,38,.9); border: 1px solid; white-space: nowrap; transform: translate(-50%, -150%); display: inline-block }
 .notes { border-left: 2px solid var(--note); padding: 2px 0 2px 12px; display: grid; gap: 1px }
 .notes .eyebrow { color: var(--note) }
@@ -229,7 +254,16 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
 
   <div class="app">
     <div class="left">
-      <div id="map" role="region" aria-label="Map of runs and cafes"></div>
+      <div class="viewbar" role="tablist" aria-label="View">
+        <button type="button" role="tab" id="view-cafe" aria-selected="true" data-tip="view-cafe">Cafe view <span>· datum</span></button>
+        <button type="button" role="tab" id="view-run" aria-selected="false" aria-disabled="true" data-tip="view-run">Run view <span id="view-run-hint">· click a run</span></button>
+        <span class="viewctx" id="view-ctx"></span>
+      </div>
+      <div class="mapwrap" id="mapwrap">
+        <div id="map" role="region" aria-label="Map of runs and cafes"></div>
+        <span class="view-label" id="view-label">VIEW A · CAFE (DATUM A)</span>
+        <button type="button" class="back-run" id="back-run" hidden>↩ back to run</button>
+      </div>
       <div class="legend" id="legend"></div>
       <div class="detail" id="detail"><p class="muted">Loading the inspection engine…</p></div>
     </div>
@@ -288,7 +322,8 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
               <li><b>Runs:</b> green when accepted, red when rejected. The dots mark each run's closest point.</li>
               <li><b>Red dashed circle:</b> the position zone.</li>
               <li><b>White callouts</b> (toggle "GD&amp;T annotations"): the datum A, a ⌖ frame for the position zone, and a ⌒ frame plus band-width dimension for each main street, each with the actual values, the way a drawing is annotated.</li>
-              <li><b>Click a run</b> anywhere on the map to inspect it (where runs overlap, a list lets you pick one). It is drawn in white with arrows for its direction, and the Run report tab lists every cafe it passed, in order, with its verdict at each. A row under "Runs at this cafe" opens it too.</li>
+              <li><b>Two views:</b> selecting a cafe shows the <b>cafe view</b> (blue); selecting a run shows the <b>run view</b> (white). The page always opens in the cafe view.</li>
+              <li><b>Click a run</b> anywhere on the map, in either view, to open the run view (where runs overlap, a list lets you pick one). The map fits the whole run, drawn in orange with arrows for its direction; the cafes it passed are numbered in route order, every other cafe is a faint dot you can still click, and the Run report lists them with its verdict at each. A row under "Runs at this cafe" opens it too.</li>
               <li><b>Yellow handwriting:</b> checker's notes, written only when a cafe's runs show something worth pointing out. A yellow ① in the table marks those cafes.</li>
             </ul>
           </li>
@@ -403,6 +438,8 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
     "st-both": ["Both", "Passes meeting both callouts."],
     "st-p95": ["⌒ p95", "95th-percentile profile actual on this street, in metres: 95% of passes stay within this band width."],
     "st-bias": ["Bias", "Average sideways offset from the centreline. N/S for east-west streets, W/E for north-south ones. A sidewalk run sits a few metres off by design."],
+    "view-cafe": ["Cafe view (datum)", "Zoomed on one cafe: its search circle, band and zone, every run as the purple glow, every cafe as a status symbol. Selecting any cafe shows this view."],
+    "view-run": ["Run view (part)", "The whole run in orange, everything else dimmed. The cafes it passed within R are numbered in route order (filled = accepted, hollow = rejected); every other cafe is a faint dot. Selecting any run shows this view."],
     "runs-table": ["Runs at this cafe", "One row per run (part) that came within R: its Ø (twice the closest approach), its ⌒ actual (twice its largest offset), the two verdicts and the result. Click a row to inspect that run."],
     "run-strip": ["Route strip", "The run as one line from start to finish. Each mark is a cafe, placed where along the run it was passed: filled = accepted, hollow = rejected. Click one to select that cafe."],
     "run-profile": ["This run at the cafe", "The run's sideways offset from the centreline along the street inside R, against the profile band. Its ⌒ actual is twice the largest offset."],
@@ -605,7 +642,7 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
   const years = [...new Set(runYears)].sort();
   const hash = new URLSearchParams(location.hash.slice(1));
   const state = { R: 75, tol: 50, band: 30, acc: 75, years: new Set(years), show: hash.get("show") === "both" ? "both" : "all",
-    sel: -1, query: "", res: [], annot: true, run: -1, hover: -1 };
+    sel: -1, query: "", res: [], annot: true, run: -1, hover: -1, mode: "cafe", lastRun: -1 };  // always opens in the cafe view
   const yearMask = () => [...state.years].reduce((m, y) => m | (1 << Math.max(0, Math.min(31, y - 2000))), 0) >>> 0;
 
   // ---------- map ----------
@@ -640,7 +677,7 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.globalCompositeOperation = "lighter";
       const z = m.getZoom();
-      const dim = state.run >= 0 ? 0.45 : 1;  // a selected run stands out against a dimmed glow
+      const dim = state.mode === "run" ? 0.3 : 1;  // in the run view the run stands out against a dimmed glow
       ctx.strokeStyle = `rgba(144,133,233,${(z >= 15 ? 0.3 : z >= 13 ? 0.38 : 0.5) * dim})`;
       ctx.lineWidth = z >= 15 ? 2 : z >= 13 ? 1.5 : 1.2;
       ctx.lineJoin = ctx.lineCap = "round";
@@ -678,6 +715,18 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
       const circ = (rad, w) => { ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, 2 * Math.PI); ctx.strokeStyle = c; ctx.lineWidth = w; ctx.stroke(); };
       const half = from => { ctx.beginPath(); ctx.arc(p.x, p.y, r * .88, from, from + Math.PI); ctx.closePath(); ctx.fillStyle = c; ctx.fill(); };
       ctx.save();
+      if (o.kind === "faint") {  // run view: a cafe this run didn't pass, still clickable
+        disc(r + 1.5, "rgba(28,32,38,.9)");
+        ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 2 * Math.PI); ctx.strokeStyle = "#97a3b0"; ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.restore(); return;
+      }
+      if (o.kind === "num") {  // run view: a cafe this run passed, numbered in route order (filled = accepted)
+        disc(r + 2.5, "rgba(12,15,19,.85)");
+        if (o.ok) disc(r, c); else { disc(r, "#151a20"); circ(r - 1, 2.2); }
+        ctx.fillStyle = o.ok ? "#0c0f13" : c; ctx.font = `700 ${Math.round(r * 1.05)}px "B612 Mono", monospace`;
+        ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(o.num), p.x, p.y + 0.5);
+        ctx.restore(); return;
+      }
       disc(r + 2.2, "rgba(28,32,38,.92)");
       if (o.kind === 0) disc(r, c);
       else if (o.kind === 5) disc(Math.max(2, r * .5), c);
@@ -777,7 +826,36 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
   const ychip = (y, n) => n ? `<span class="chip ${y >= state.acc / 100 - 1e-9 ? "ok" : "bad"}">${pct(y)}</span>` : `<span class="chip mid">–</span>`;
   const schip = (s, short) => `<span class="chip st" data-tip="status-${s}">${sym(s)}${esc(short ? STATUS[s].short : STATUS[s].label)}</span>`;
 
+  // rebinding a tooltip is costly, so only when its text or permanence changes
+  function setPinTip(pin, html, permanent) {
+    const key = (permanent ? "P" : "T") + html;
+    if (pin._tipKey === key) return;
+    pin._tipKey = key;
+    pin.unbindTooltip().bindTooltip(html, { className: "cafe-tip" + (permanent ? " label" : ""),
+      direction: permanent ? "right" : "top", offset: permanent ? [10, 0] : [0, -6], permanent });
+  }
   function drawPins() {
+    if (state.mode === "run") {  // the run's cafes numbered in route order; every other cafe a faint, clickable dot
+      const order = new Map(runReport(state.run).map((w, k) => [w.cafe, { k: k + 1, w }]));
+      state.res.forEach(r => {
+        const pin = pins[r.i], o = order.get(r.i);
+        if (o) {
+          const ok = o.w.pos && o.w.pro, col = css(ok ? "--s-both" : "--s-none");
+          pin.setStyle({ kind: "num", num: o.k, ok, fillColor: col, sel: false, color: "#e6ebf0", weight: 1.2 });
+          pin.setRadius(9);
+          // labels stay on from zoom 16, as in the cafe view; at a whole-run zoom they'd overlap, so hover shows them
+          setPinTip(pin, `<b style="color:${col}">${o.k}</b> ${esc(cafeName[r.i])} · Ø${(2 * o.w.d).toFixed(0)} ${ok ? "✓" : "✗"}`,
+            map.getZoom() >= LABEL_ZOOM);
+          pin.bringToFront();
+        } else {
+          pin.setStyle({ kind: "faint", fillColor: "#97a3b0", sel: false, color: "#97a3b0", weight: 1 });
+          pin.setRadius(4);
+          setPinTip(pin, esc(cafeName[r.i]), false);
+        }
+        if (!map.hasLayer(pin)) pin.addTo(map);
+      });
+      return;
+    }
     const both = state.res.filter(r => r.status === 0).length;
     state.res.forEach(r => {
       const pin = pins[r.i], show = visible(r) || r.i === state.sel;
@@ -787,10 +865,7 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
       pin.setRadius(r.i === state.sel ? 7.5 : (r.status === 5 ? 5 : 6));
       if (!map.hasLayer(pin)) pin.addTo(map);
       const permanent = map.getZoom() >= LABEL_ZOOM || (state.show === "both" && both <= 40);
-      if (pin.getTooltip().options.permanent !== permanent) {
-        pin.unbindTooltip().bindTooltip(esc(cafeName[r.i]), { className: "cafe-tip" + (permanent ? " label" : ""),
-          direction: permanent ? "right" : "top", offset: permanent ? [7, 0] : [0, -6], permanent });
-      }
+      setPinTip(pin, esc(cafeName[r.i]), permanent);
     });
   }
 
@@ -832,6 +907,7 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
 
   function drawDetail() {
     overlay.clearLayers();
+    $("detail").hidden = state.mode === "run";  // the run view has its own report; the cafe's detail is for the cafe view
     if (state.sel < 0) { $("detail").innerHTML = `<p class="muted">Click a cafe on the map or in the table to inspect it.</p>`; return; }
     const i = state.sel, r = state.res[i], d = detail(i), c = lls[i];
     // drawing on the map: R, nominal + band, passes, closest approaches, Ø zone
@@ -848,6 +924,7 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
     L.circle(c, { radius: state.tol / 2, color: "#ff6a6a", weight: 1.6, dashArray: "6 4", fill: false, interactive: false }).addTo(overlay);
     const notes = notesOf(i);
     lastDetail = { i, r, d, notes };
+    if (state.mode === "run") overlay.clearLayers();  // kept for the step list and picker, but not drawn
     drawAnnotations();
 
     const n = d.parts.length, posN = d.parts.filter(p => p.pos).length, proN = d.parts.filter(p => p.pro).length, bothN = d.parts.filter(p => p.pos && p.pro).length;
@@ -936,7 +1013,7 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
 
   function drawAnnotations() {
     annot.clearLayers();
-    if (!state.annot || state.sel < 0 || !lastDetail || lastDetail.i !== state.sel) return;
+    if (state.mode !== "cafe" || !state.annot || state.sel < 0 || !lastDetail || lastDetail.i !== state.sel) return;
     const { i, r, d } = lastDetail;
     const c = lls[i], C = toPt(c), ppm = pxPerMetre(c);
     if (!d.parts.length) return;
@@ -997,18 +1074,68 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
     const h = new URLSearchParams();
     if (state.sel >= 0) h.set("cafe", String(cafeOsm[state.sel]));
     if (state.show === "both") h.set("show", "both");
-    if (state.run >= 0) h.set("run", String(state.run + 1));  // the run's position in the build, never an activity id
+    if (state.mode === "run") h.set("run", String(state.run + 1));  // the run's position in the build, never an activity id
     history.replaceState(null, "", "#" + h.toString());
   }
 
+  // Selecting a cafe always shows the cafe view; leaving the run view zooms in on the cafe.
   function select(i, pan) {
+    const wasRun = state.mode === "run";
     state.sel = i;
-    if (pan) map.setView(lls[i], Math.max(map.getZoom(), 17), { animate: false });
+    if (wasRun) { state.lastRun = state.run; state.run = -1; state.mode = "cafe"; state.hover = -1; map.closePopup(); glow._draw(); }
+    if (pan || wasRun) map.setView(lls[i], Math.max(wasRun ? 0 : map.getZoom(), 17), { animate: false });
     writeHash();
-    drawPins(); table(); drawDetail(); renderRunReport();
+    drawPins(); table(); drawDetail(); drawRun(); renderRunReport(); viewChrome();
   }
 
-  function refresh() { evaluate(); drawPins(); table(); drawDetail(); drawRun(); renderRunReport(); }
+  function refresh() { evaluate(); drawPins(); table(); drawDetail(); drawRun(); renderRunReport(); viewChrome(); }
+
+  // ---------- the two views: chrome around the map and panel ----------
+  const CAFE_LEGEND = () => STATUS.map((s, k) => `<span data-tip="status-${k}">${sym(k)}${esc(s.label)}</span>`).join("") +
+    `<span class="pen" data-tip="notes">① checker's note</span>`;
+  const RUN_LEGEND = () => `<span><i class="runline"></i>this run (arrows: direction; S / F: start, finish)</span>
+    <span><b class="badge" style="background:var(--s-both);color:#0c0f13">1</b><b class="badge" style="border:2px solid var(--s-none);color:var(--s-none)">2</b>cafes it passed, in route order: filled accepted, hollow rejected</span>
+    <span><i class="faintdot"></i>any other cafe (click to open its cafe view)</span>
+    <span>faint purple: other runs (click one to open it)</span>`;
+  function viewChrome() {
+    const run = state.mode === "run";
+    $("mapwrap").classList.toggle("run", run);
+    $("view-cafe").setAttribute("aria-selected", !run);
+    $("view-run").setAttribute("aria-selected", run);
+    $("view-run").setAttribute("aria-disabled", !run && state.lastRun < 0);
+    $("view-run-hint").textContent = run ? "· " + runDate(state.run) : state.lastRun >= 0 ? "· last: " + runDate(state.lastRun) : "· click a run";
+    $("view-label").textContent = run ? "VIEW B · RUN (PART)" : "VIEW A · CAFE (DATUM A)";
+    $("back-run").hidden = run || state.lastRun < 0;
+    if (state.lastRun >= 0) $("back-run").textContent = "↩ back to run · " + runDate(state.lastRun);
+    if (run) {
+      const n = runReport(state.run).length;
+      $("view-ctx").textContent = `${runDate(state.run)} · ${km(runLen[state.run])} · ${n} cafe${n === 1 ? "" : "s"} considered`;
+    } else if (state.sel >= 0) {
+      const r = state.res[state.sel];
+      $("view-ctx").textContent = `${cafeName[state.sel]} · ${r.runs} runs · ${STATUS[r.status].label}`;
+    }
+    setTab(run ? "run" : "cafes");
+    $("tab-run-btn").setAttribute("aria-disabled", !run && state.lastRun < 0);
+    const want = run ? "run" : "cafe";
+    if ($("legend").dataset.view !== want) { $("legend").dataset.view = want; $("legend").innerHTML = run ? RUN_LEGEND() : CAFE_LEGEND(); decorateTips($("legend")); }
+  }
+  function fitRun(run) {
+    const flat = [].concat(...runLines(run));
+    if (flat.length) map.fitBounds(L.latLngBounds(flat), { padding: [44, 44], maxZoom: 17, animate: false });
+  }
+  function fitSelection() { if (state.mode === "run") fitRun(state.run); else if (state.sel >= 0) map.setView(lls[state.sel], 17, { animate: false }); }
+  const FitControl = L.Control.extend({
+    options: { position: "topleft" },
+    onAdd() {
+      const box = L.DomUtil.create("div", "leaflet-bar leaflet-control leaflet-control-fit");
+      const a = L.DomUtil.create("a", "", box);
+      a.href = "#"; a.title = "Fit the selection"; a.setAttribute("role", "button"); a.setAttribute("aria-label", "Fit the selection"); a.textContent = "⤢";
+      L.DomEvent.disableClickPropagation(box);
+      L.DomEvent.on(a, "click", e => { L.DomEvent.preventDefault(e); fitSelection(); });
+      return box;
+    },
+  });
+  new FitControl().addTo(map);
 
   // ---------- one run: picking, drawing, report (the engine answers; the page draws and words) ----------
   function runReport(run) {
@@ -1042,36 +1169,39 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
   }
   function drawRun() {
     runLayer.clearLayers();
-    if (state.hover >= 0 && state.hover !== state.run)
+    if (state.hover >= 0 && state.hover !== state.run)  // a run previewed from the picker or the runs table, in either view
       L.polyline(runLines(state.hover), { renderer: runRenderer, color: "#f6f7f9", weight: 1.6, dashArray: "5 4", opacity: .9, interactive: false }).addTo(runLayer);
-    if (state.run < 0) return;
+    if (state.mode !== "run") return;
     const lines = runLines(state.run);
-    L.polyline(lines, { renderer: runRenderer, color: "#f6f7f9", weight: 8, opacity: .14, interactive: false }).addTo(runLayer);
-    L.polyline(lines, { renderer: runRenderer, color: "#f6f7f9", weight: 2.4, opacity: 1, interactive: false }).addTo(runLayer);
+    const runCol = css("--run");  // the selected run is orange; a hover preview stays white dashed
+    L.polyline(lines, { renderer: runRenderer, color: runCol, weight: 9, opacity: .2, interactive: false }).addTo(runLayer);
+    L.polyline(lines, { renderer: runRenderer, color: runCol, weight: 2.8, opacity: 1, interactive: false }).addTo(runLayer);
     runArrows(lines).forEach(a => L.marker(a.ll, { pane: "runs", interactive: false, keyboard: false,
       icon: L.divIcon({ className: "", html: `<div class="run-arrow" style="transform: translate(-4px, -5px) rotate(${a.deg.toFixed(0)}deg)"></div>`, iconSize: [0, 0] }) }).addTo(runLayer));
-    runReport(state.run).forEach(w => {
-      const ok = w.pos && w.pro;
-      L.circleMarker(lls[w.cafe], { renderer: runRenderer, radius: 12, color: css(ok ? "--s-both" : "--s-none"), weight: 2.2,
-        dashArray: ok ? null : "3 2", fill: false, interactive: false }).addTo(runLayer);
-      L.circleMarker(w.q, { renderer: runRenderer, radius: 3, stroke: false, fillColor: "#f6f7f9", fillOpacity: 1, interactive: false }).addTo(runLayer);
-      L.marker(w.q, { pane: "runs", interactive: false, keyboard: false, icon: L.divIcon({ className: "", iconSize: [0, 0],
-        html: `<span class="run-dia" style="color:var(${w.pos ? "--s-both" : "--s-none"});border-color:var(${w.pos ? "--s-both" : "--s-none"})">Ø${(2 * w.d).toFixed(0)}</span>` }) }).addTo(runLayer);
-    });
+    // start and finish (a public build has trimmed them, so these are where the shown track begins and ends)
+    const flat = [].concat(...lines);
+    if (flat.length) {
+      const a = flat[0], b = flat[flat.length - 1], kx = 111320 * Math.cos(a[0] * Math.PI / 180);
+      const same = Math.hypot((b[1] - a[1]) * kx, (b[0] - a[0]) * 110540) < 30;
+      (same ? [[a, "S/F"]] : [[a, "S"], [b, "F"]]).forEach(([ll, t]) => L.marker(ll, { pane: "runs", interactive: false, keyboard: false,
+        icon: L.divIcon({ className: "", iconSize: [0, 0], html: `<span class="run-end">${t}</span>` }) }).addTo(runLayer));
+    }
+    runReport(state.run).forEach(w => L.circleMarker(w.q, { renderer: runRenderer, radius: 3, stroke: false, fillColor: "#f6f7f9",
+      fillOpacity: 1, interactive: false }).addTo(runLayer));  // each closest approach
   }
   function setTab(t) {
     $("tab-cafes").hidden = t !== "cafes"; $("tab-run").hidden = t !== "run";
     $("tab-cafes-btn").setAttribute("aria-selected", t === "cafes"); $("tab-run-btn").setAttribute("aria-selected", t === "run");
   }
-  function selectRun(run) {
-    state.run = run; state.hover = -1;
-    map.closePopup(); setTab("run"); writeHash();
-    glow._draw(); drawRun(); renderRunReport(); drawDetail();
+  // Selecting a run always shows the run view, fitted to the whole run.
+  function selectRun(run, fit = true) {
+    state.mode = "run"; state.run = run; state.lastRun = run; state.hover = -1;
+    map.closePopup(); writeHash();
+    glow._draw(); drawDetail(); drawPins(); drawRun(); renderRunReport(); viewChrome();
+    if (fit) fitRun(run);
   }
-  function clearRun() {
-    state.run = -1; state.hover = -1;
-    writeHash(); glow._draw(); drawRun(); renderRunReport(); drawDetail();
-  }
+  // ✕ and the Cafes tab: back to the cafe view of the cafe you came from
+  function clearRun() { if (state.mode === "run") select(state.sel, true); }
   const hoverRun = run => { if (state.hover !== run) { state.hover = run; drawRun(); } };
   // ◀ ▶ step through the runs at the selected cafe when the run is one of them, else through every shown run
   function stepList() {
@@ -1177,7 +1307,7 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
     const k = M._ct_runs_at(ll[0], ll[1], r), H = f64(M._ct_runs_at_data(), 2 * k), ids = [];
     for (let j = 0; j < k; j++) ids.push(H[2 * j]);
     if (!ids.length) { map.closePopup(); return; }
-    if (ids.length === 1) { selectRun(ids[0]); return; }
+    if (ids.length === 1) { if (!(state.mode === "run" && ids[0] === state.run)) selectRun(ids[0]); return; }
     ids.sort((a, b) => runDates[a] - runDates[b] || a - b);
     const pop = L.popup({ className: "run-picker", maxWidth: 280, minWidth: 262, autoPanPadding: [24, 24] }).setLatLng(e.latlng)
       .setContent(pickerHtml(ids.slice(0, 60))).openOn(map);
@@ -1213,23 +1343,28 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
     const y = +b.dataset.y;
     if (state.years.has(y) && state.years.size > 1) state.years.delete(y); else state.years.add(y);
     $("years").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", state.years.has(+x.dataset.y)));
-    if (state.run >= 0 && !state.years.has(runYears[state.run])) { state.run = -1; writeHash(); }  // its year is hidden now
+    if (state.lastRun >= 0 && !state.years.has(runYears[state.lastRun])) state.lastRun = -1;  // its year is hidden now
+    if (state.mode === "run" && !state.years.has(runYears[state.run])) { select(state.sel, true); return; }
     glow._draw(); refresh();
   }));
   const setShow = mode => {
     state.show = mode;
     $("show-all").setAttribute("aria-pressed", mode === "all"); $("show-both").setAttribute("aria-pressed", mode === "both");
+    if (state.mode === "run") { table(); writeHash(); return; }  // the filter is for the cafe view; the run view stays
     if (state.sel >= 0) select(state.sel, false); else { drawPins(); table(); }
   };
   $("show-all").addEventListener("click", () => setShow("all"));
   $("show-both").addEventListener("click", () => setShow("both"));
   $("search").addEventListener("input", e => { state.query = e.target.value; table(); });
   $("annot").addEventListener("change", e => { state.annot = e.target.checked; drawAnnotations(); });
-  $("tab-cafes-btn").addEventListener("click", () => setTab("cafes"));
-  $("tab-run-btn").addEventListener("click", () => setTab("run"));
-  $("legend").innerHTML = STATUS.map((s, k) => `<span data-tip="status-${k}">${sym(k)}${esc(s.label)}</span>`).join("") +
-    `<span class="pen" data-tip="notes">① checker's note</span>`;
-  decorateTips($("legend"));
+  // the panel tabs and the view bar switch views: Cafes = the cafe view, Run report = the last run's view
+  const toCafeView = () => { if (state.mode === "run") clearRun(); };
+  const toRunView = () => { if (state.mode !== "run" && state.lastRun >= 0) selectRun(state.lastRun); };
+  $("tab-cafes-btn").addEventListener("click", toCafeView);
+  $("tab-run-btn").addEventListener("click", toRunView);
+  $("view-cafe").addEventListener("click", toCafeView);
+  $("view-run").addEventListener("click", toRunView);
+  $("back-run").addEventListener("click", toRunView);
 
   // ---------- start ----------
   M._ct_set_radius(state.R);
@@ -1242,8 +1377,10 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
     const best = state.res.filter(r => r.status === 0).sort((a, b) => b.runs - a.runs)[0] || state.res.slice().sort((a, b) => b.runs - a.runs)[0];
     if (best) select(best.i, true); else refresh();
   }
-  const wantRun = +(hash.get("run") || 0) - 1;  // #run=<n> reopens a run report
-  if (wantRun >= 0 && wantRun < nRuns) selectRun(wantRun); else renderRunReport();
+  // The page always opens in the cafe view. A #run=<n> link only offers "back to run" for that run.
+  const wantRun = +(hash.get("run") || 0) - 1;
+  if (wantRun >= 0 && wantRun < nRuns && state.years.has(runYears[wantRun])) state.lastRun = wantRun;
+  renderRunReport(); viewChrome();
 })();
 </script>
 </body>

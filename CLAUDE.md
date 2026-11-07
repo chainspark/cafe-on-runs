@@ -70,6 +70,7 @@ A GD&T-style tolerance analysis of the owner's Garmin runs past Toronto cafes.
 
 ## Page
 - One dark drawing-sheet theme. Checker's notes are light yellow (`--note`); keep that colour apart from the reds of rejection and the purple of runs.
+- **Two views:** selecting a cafe shows the cafe view (blue); selecting a run shows the run view (white). The page always opens in the cafe view. Keep that rule for any new way of selecting.
 - A new note kind needs a sentence in `NOTE_TEXT`. Rule changes go in C++ (see GD&T model) and the README list.
 - The map's zoom limit copies `opendata.TORONTO` into `CITY`. Change both together.
 

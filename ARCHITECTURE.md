@@ -310,13 +310,19 @@ When adding a function, mark it `EMSCRIPTEN_KEEPALIVE`, add it to the export lis
   - **Panel:** the selected cafe's notes come from `ct_notes`.
   - **Map:** the first note is written above the R circle, and hidden when R is under 30 px.
   - **Table:** the ① marks come from one `ct_note_counts` call, cached per setting.
+- **Views:** `state.mode` is `"cafe"` or `"run"`.
+  - **The rule:** `select(i)` always enters the cafe view; leaving the run view saves `lastRun` and zooms to the cafe. `selectRun(run)` always enters the run view and fits the map to the whole run.
+  - **Opening:** the page always opens in the cafe view; a `#run=` hash only sets `lastRun` for "↩ back to run".
+  - **Chrome:** `viewChrome()` keeps the view bar, map border, corner label, back button, panel tabs and legend in step with the mode.
+  - **Fit:** a custom Leaflet control (⤢) refits to the selection.
 - **Run inspection:**
-  - A map click that misses a pin calls `ct_runs_at`. One hit opens that run; several open a Leaflet popup listing them by date. Hovering a row draws that run dashed.
-  - The selected run is drawn on a `runs` pane (z 610, between the cafe overlay and the pins) with arrows (`divIcon`s rotated to the screen bearing; Mercator keeps angles, so they need no redraw on zoom), verdict rings and Ø labels from `ct_run_report`.
-  - The Glow layer dims while a run is selected.
-  - The panel's **Run report** tab renders the report, the route strip (marks placed at along / length, stacked on three lanes when close), and the profile from `ct_run_profile`.
-  - "Runs at this cafe" is built from `ct_detail` parts.
-  - The URL hash carries `run=<index + 1>`.
+  - **Picking:** a map click that misses a pin calls `ct_runs_at`, in either view. One hit opens that run; several open a Leaflet popup listing them by date. Hovering a row draws that run dashed. Pin clicks stop propagation, so they never count as run clicks.
+  - **Pins in the run view:** `drawPins` switches the `Pin` canvas symbol to `kind: "num"` (number in route order; filled = accepted, hollow = rejected) for the run's cafes and `kind: "faint"` for every other cafe. Labels show from zoom 16, or on hover.
+  - **The run's layer:** the run is drawn on a `runs` pane (z 610, between the cafe overlay and the pins) with arrows (`divIcon`s rotated to the screen bearing; Mercator keeps angles, so they need no redraw on zoom), S / F markers and closest-approach dots.
+  - **What hides:** the cafe overlay, annotations and the cafe detail. `lastDetail` is still computed, for the step list and picker. The Glow layer dims.
+  - **The report:** the panel's **Run report** tab renders the report, the route strip (marks placed at along / length, stacked on three lanes when close), and the profile from `ct_run_profile`.
+  - **Runs at this cafe:** built from `ct_detail` parts.
+  - **URL:** the hash carries `run=<index + 1>` while in the run view.
 - **Zoom limit:** the map's `maxBounds` is the City of Toronto box (`opendata.TORONTO`, copied into the page), and `minZoom` is `getBoundsZoom(CITY, true)`, recomputed on resize, so the view never shows beyond the city.
 - **URL hash:** `#cafe=<osm id>&show=both` selects a cafe and the filter on load, and the hash is updated on every selection. Use it to share a view or take screenshots.
 - **Tooltips:** `data-tip` keys on every control, column header, frame and status point into one `TIPS` table. A single `position: fixed` element (`role=tooltip`, linked with `aria-describedby`) shows on mouse hover, keyboard focus or a tap, so scrolling tables never clip it. Escape or moving away hides it. Non-interactive anchors get a dotted underline and `tabindex=0`. A `TIPS` entry may carry a fourth item, a function returning an inline SVG infographic (`figPos`, `figPro`): a schematic zone or band, one conforming and one failing run, and a mini feature control frame, scaled to the current `state.tol` / `state.band`. The figures use `currentColor` for the zone and band and `--tip-ok` / `--tip-bad` for the runs. An `input` event redraws an open slider tip, and on touch a tap on a slider or its label shows the tip, because a tapped range input takes no focus.

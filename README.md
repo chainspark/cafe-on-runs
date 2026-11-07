@@ -93,13 +93,16 @@ The page is a dark engineering drawing sheet: a zone-marked border, drawing lett
   - ⌒ p95 over the band by at most 8 m, while ≥ 80% of runs hold it (from 10 runs)
   - exactly one run failing both callouts (from 15 runs)
   - every run accepted (from 10 runs)
+- **Two views:** selecting a cafe shows the **cafe view** (datum, blue); selecting a run shows the **run view** (part, white). The page always opens in the cafe view. A bar above the map shows which view is on, the map's top edge and corner label take its colour, and the panel tabs (Cafes / Run report) switch views too.
+  - **Cafe view:** zoomed on one cafe, with its R circle, band, zone, annotations and notes; every run is the purple glow, every cafe a status symbol.
+  - **Run view:** the map fits the whole run, drawn in orange with arrows and S / F markers; the glow dims. The cafes it passed are numbered in route order (filled = accepted, hollow = rejected; names from zoom 16 or on hover), and every other cafe is a faint dot you can still click. The cafe overlay is hidden.
+  - **Both views:** zoom with + / −, **⤢** refits to the selection, drag to pan, and any run or cafe on the map can be selected.
 - **Inspecting one run** (a part):
-  - **Click a run** anywhere on the map. Where runs overlap, a list shows every run under the click by date; hovering a row draws that run dashed, and "accepted / rejected here" gives its verdict at the selected cafe.
-  - **Runs at this cafe**, under the selected cafe's frames: one row per run with its Ø, ⌒ actual and verdicts. A row opens the run.
-  - **On the map** the run is drawn in white with arrows for its direction, the glow is dimmed, and every cafe it passed gets a ring (green accepted, dashed orange rejected) with its Ø at the closest approach.
-  - **Run report** tab: the date, length, cafes passed, accepted and rejected, the best Ø and worst ⌒, a **route strip** (the run as one line, with a mark where each cafe was passed), and the cafes in route order. ◀ ▶ step through the runs at the selected cafe, by date.
+  - **Click a run** anywhere on the map, in either view. Where runs overlap, a list shows every run under the click by date; hovering a row draws that run dashed, and "accepted / rejected here" gives its verdict at the selected cafe.
+  - **Runs at this cafe**, under the selected cafe's frames: one row per run with its Ø, ⌒ actual and verdicts. A row opens the run view.
+  - **Run report:** the date, length, cafes passed, accepted and rejected, the best Ø and worst ⌒, a **route strip** (the run as one line, with a mark where each cafe was passed), and the cafes in route order. ◀ ▶ step through the runs at the cafe you came from, by date; ✕ goes back to its cafe view. Any cafe (pin, strip mark or row) opens its cafe view, and "↩ back to run" returns.
   - **This run at the cafe:** the run's sideways offset along the street inside R, against the band.
-  - `#run=<n>` in the URL reopens a run. It is the run's position in the build, never a Garmin activity id.
+  - `#run=<n>` in the URL marks a run to go back to; the page still opens in the cafe view. It is the run's position in the build, never a Garmin activity id.
 - **Controls:**
   - R (30–150 m), Ø (10–200 m, never more than 2R), band (10–60 m) and acceptance (50–100%)
   - year chips, "All / Conform to both", and search
