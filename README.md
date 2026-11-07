@@ -55,6 +55,7 @@ roasters stay in.
   - R (40–300 m), Ø (10–200 m), band (10–60 m) and acceptance (50–100%)
   - year chips, "All / Conform to both", and search
   - the URL hash `#cafe=<osm id>&show=both` reopens a view
+- **Tooltips:** every parameter, column header, frame and status explains itself. Hover over it, focus it with the keyboard, or tap it on a phone. Each tip includes the default and range where there is one. The position zone and profile band tips also draw a small diagram, with one conforming run and one failing run, labelled with the current slider value and updated as the slider moves.
 - **About this project**, at the bottom of the page, explains all of this in plain language and lists the data sources recorded in that build.
 
 ## Data sources

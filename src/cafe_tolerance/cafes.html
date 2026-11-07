@@ -14,6 +14,7 @@
   --chip-ok: #e1f2ea; --chip-bad: #f8e4df; --chip-mid: #e7ebf0;
   --map-bg: #1c2026; --map-ink: #e6ebf0; --map-label: #9aa4b0;
   --s-both: #4cc38a; --s-pos: #79a8ff; --s-prof: #b9a8ff; --s-apart: #f0b44c; --s-none: #ff8466; --s-few: #7e8996;
+  --tip-zone: #ff6d6d; --tip-ok: #4cc38a; --tip-bad: #f0b44c;  /* the tooltip is inverted (ink background) */
   --f-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
   --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --f-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
@@ -23,6 +24,7 @@
     --paper: #0f1318; --sheet: #151a20; --ink: #e2e8ee; --muted: #97a3b0; --rule: #2a323c;
     --accent: #74a3ff; --zone: #ff6d6d; --ok: #4cc38a; --bad: #ff8466; --amber: #f0b44c;
     --chip-ok: #143326; --chip-bad: #3a1d16; --chip-mid: #232a33;
+    --tip-zone: #cf3a3a; --tip-ok: #19805a; --tip-bad: #9a6a00;
     color-scheme: dark;
   }
 }
@@ -101,6 +103,27 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
 .leaflet-tooltip.cafe-tip { font: 600 11px var(--f-mono); background: #1c2026; color: #e6ebf0; border: 1px solid #3a424d; box-shadow: none }
 .leaflet-tooltip.cafe-tip::before { display: none }
 .leaflet-tooltip.cafe-tip.label { padding: 1px 5px; font-size: 10.5px; background: rgba(28,32,38,.82); border-color: transparent }
+/* tooltips: one floating element, positioned in the viewport so scrolling tables never clip it */
+.tipped { text-decoration: underline dotted; text-decoration-color: var(--muted); text-underline-offset: 3px; cursor: help }
+.fcf.tipped, .chip.tipped, svg.tipped { text-decoration: none }
+#tip { position: fixed; z-index: 2000; max-width: min(320px, calc(100vw - 16px)); background: var(--ink); color: var(--sheet);
+  font: 12.5px/1.45 var(--f-body); padding: 8px 10px; border-radius: 3px; box-shadow: 0 4px 14px rgba(0,0,0,.35); pointer-events: none }
+#tip b { display: block; font-weight: 650; margin-bottom: 2px }
+#tip .def { font: 11.5px var(--f-mono); opacity: .8; margin-top: 5px }
+/* tooltip infographics: schematic, drawn in the tooltip's own (inverted) colours */
+#tip svg.fig { display: block; width: 300px; max-width: 100%; height: auto; margin: 8px 0 2px; font: 10.5px var(--f-mono); overflow: visible }
+#tip .fig text { fill: currentColor }
+#tip .fig .fr, #tip .fig .dim { fill: none; stroke: currentColor; stroke-width: 1 }
+#tip .fig .nom { fill: none; stroke: currentColor; stroke-opacity: .7; stroke-width: 1.2; stroke-dasharray: 14 3 2 3 }
+#tip .fig .zone { fill: var(--tip-zone); fill-opacity: .16; stroke: var(--tip-zone); stroke-width: 1.4; stroke-dasharray: 5 3 }
+#tip .fig .zfill { fill: var(--tip-zone); fill-opacity: .16 }
+#tip .fig .zedge { stroke: var(--tip-zone); stroke-width: 1.4; stroke-dasharray: 5 3 }
+#tip .fig .ok { fill: none; stroke: var(--tip-ok); stroke-width: 2; stroke-linejoin: round }
+#tip .fig .bad { fill: none; stroke: var(--tip-bad); stroke-width: 2; stroke-linejoin: round }
+#tip .fig .thin { stroke-width: 1; stroke-dasharray: 3 3 }
+#tip .fig .okt { fill: var(--tip-ok); font-weight: 600 } #tip .fig .badt { fill: var(--tip-bad); font-weight: 600 }
+#tip .fig .zt { fill: var(--tip-zone) }
+#tip .fig .dot { fill: currentColor } #tip .fig .bdot { fill: var(--tip-bad) }
 /* GD&T annotations drawn on the map for the selected cafe (drawing-sheet style, light on the dark map) */
 .anno { pointer-events: none; font: 600 11px var(--f-mono); color: #18232e; white-space: nowrap }
 .anno .box { position: absolute; top: 0; left: 0; transform: translate(0, -50%); background: #f6f7f9; border: 1.5px solid #18232e; box-shadow: 0 2px 8px rgba(0,0,0,.5) }
@@ -152,25 +175,25 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
     </div>
     <div class="panel">
       <div class="controls">
-        <div class="ctl"><label for="r">Search radius R</label><output id="r-out" for="r"></output>
-          <input type="range" id="r" min="40" max="300" step="5" value="75"></div>
-        <div class="ctl"><label for="tol">Position zone Ø</label><output id="tol-out" for="tol"></output>
-          <input type="range" id="tol" min="10" max="200" step="5" value="50"></div>
-        <div class="ctl"><label for="band">Profile band</label><output id="band-out" for="band"></output>
-          <input type="range" id="band" min="10" max="60" step="1" value="30"></div>
-        <div class="ctl"><label for="acc">Acceptance yield</label><output id="acc-out" for="acc"></output>
-          <input type="range" id="acc" min="50" max="100" step="5" value="75"></div>
+        <div class="ctl"><label for="r" data-tip="r">Search radius R</label><output id="r-out" for="r"></output>
+          <input type="range" data-tip="r" id="r" min="40" max="300" step="5" value="75"></div>
+        <div class="ctl"><label for="tol" data-tip="tol">Position zone Ø</label><output id="tol-out" for="tol"></output>
+          <input type="range" data-tip="tol" id="tol" min="10" max="200" step="5" value="50"></div>
+        <div class="ctl"><label for="band" data-tip="band">Profile band</label><output id="band-out" for="band"></output>
+          <input type="range" data-tip="band" id="band" min="10" max="60" step="1" value="30"></div>
+        <div class="ctl"><label for="acc" data-tip="acc">Acceptance yield</label><output id="acc-out" for="acc"></output>
+          <input type="range" data-tip="acc" id="acc" min="50" max="100" step="5" value="75"></div>
       </div>
       <div class="row" id="years" role="group" aria-label="Years"></div>
       <div class="row">
         <div class="seg" role="group" aria-label="Which cafes to show">
-          <button type="button" id="show-all" aria-pressed="true">All cafes</button>
-          <button type="button" id="show-both" aria-pressed="false">Conform to both</button>
+          <button type="button" id="show-all" data-tip="show-all" aria-pressed="true">All cafes</button>
+          <button type="button" id="show-both" data-tip="show-both" aria-pressed="false">Conform to both</button>
         </div>
-        <label class="toggle"><input type="checkbox" id="annot" checked> GD&amp;T annotations</label>
+        <label class="toggle" data-tip="annot"><input type="checkbox" id="annot" checked> GD&amp;T annotations</label>
       </div>
-      <div class="count" id="count"></div>
-      <div class="row"><input id="search" type="search" placeholder="Find a cafe" aria-label="Find a cafe"></div>
+      <div class="count" id="count" data-tip="count"></div>
+      <div class="row"><input id="search" data-tip="search" type="search" placeholder="Find a cafe" aria-label="Find a cafe"></div>
       <div class="tablewrap tall"><table id="cafes"></table></div>
       <div class="status-line" id="status-line"></div>
     </div>
@@ -265,6 +288,160 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
   $("foot-mode").textContent = MODE === "public"
     ? "Public build: the first and last 500 m of every run and every privacy zone are removed before the data is compiled in."
     : "Private build: contains full GPS tracks. Do not publish this file.";
+
+  // ---------- tooltips for every parameter and readout ----------
+  const TIPS = {
+    "r": ["Search radius R", "How far from a cafe a run still counts as passing it. Each run's stretch inside this circle is a pass. A larger R also pulls in runs on nearby streets, which usually lowers the ⌖ yield.", "Default 75 m · range 40–300 m"],
+    "tol": ["Position zone Ø (⌖ true position)", "A circular tolerance zone centred on the cafe (datum A). A run's Ø is twice its closest approach to the cafe, and the run conforms when that Ø fits inside the zone.", "Default Ø50 m (within 25 m) · range Ø10–200 m", figPos],
+    "band": ["Profile band (⌒ profile of a line)", "The total width of a strip centred on the City street centreline. Every GPS point of a pass must stay inside it (±half the band). A run's actual is 2 × its largest sideways offset on its worst street.", "Default 30 m (±15 m) · range 10–60 m", figPro],
+    "acc": ["Acceptance yield", "The share of a cafe's runs that must be accepted (meeting ⌖ and ⌒ at once) for the cafe to conform to both. A cafe needs at least 3 runs.", "Default 75% · range 50–100%"],
+    "years": ["Years", "Include runs from these years only. Click a year to turn it off or on; at least one stays on. Tolerances are re-checked straight away."],
+    "show-all": ["All cafes", "Show every cafe, with pins coloured by status."],
+    "show-both": ["Conform to both", "Show only the cafes whose runs meet both callouts at the acceptance yield. Their names are labelled when there are 40 or fewer."],
+    "annot": ["GD&T annotations", "Draw callouts for the selected cafe on the map: the datum A, a ⌖ frame on the position zone, and a band-width dimension with a ⌒ frame for each of the main streets."],
+    "search": ["Find a cafe", "Filter the table by cafe name. Click a row to select the cafe and zoom to it."],
+    "count": ["Conforming cafes", "How many cafes conform to both callouts at the current settings, out of every cafe within reach of a run."],
+    "col-runs": ["Runs", "Runs that came within R of the cafe. A run counts once, even if it passed on two streets."],
+    "col-pos": ["⌖ yield", "Share of runs whose closest approach gives Ø within the position zone. Green when it reaches the acceptance yield."],
+    "col-pro": ["⌒ yield", "Share of runs whose worst pass stays inside the profile band. Green when it reaches the acceptance yield."],
+    "col-both": ["Combined yield", "Share of runs accepted, meaning they meet ⌖ and ⌒ at once. This decides whether the cafe conforms to both."],
+    "col-status": ["Status", "Conforms to both, ⌖ only, ⌒ only, apart (each callout passes alone but on different runs), neither, or few (fewer than 3 runs)."],
+    "frame-pos": ["⌖ | Ø | A: true position", "Read: each run must pass through a circle of this diameter centred on datum A, the cafe. The actual shows the best and median Ø and how many runs conform."],
+    "frame-pro": ["⌒ | band | A: profile of a line", "Read: every GPS point must stay inside a strip of this width centred on the street. The actual shows the 95th-percentile run and how many runs conform."],
+    "frame-both": ["Both callouts", "Runs accepted because they meet both callouts at once. This combined yield decides the cafe's status."],
+    "st-street": ["Street (nominal)", "The City centreline the passes are measured against: the drawing's nominal line."],
+    "st-passes": ["Passes", "Stretches of runs on this street inside R. A run that went by twice counts twice here."],
+    "st-pos": ["⌖ passes", "Passes whose closest approach to the cafe is inside the position zone."],
+    "st-pro": ["⌒ passes", "Passes whose every point stays inside the profile band."],
+    "st-both": ["Both", "Passes meeting both callouts."],
+    "st-p95": ["⌒ p95", "95th-percentile profile actual on this street, in metres: 95% of passes stay within this band width."],
+    "st-bias": ["Bias", "Average sideways offset from the centreline. N/S for east-west streets, W/E for north-south ones. A sidewalk run sits a few metres off by design."],
+    "hist": ["Ø of each run", "Distribution of the runs' closest approach as a diameter. Green bars are inside the position zone (dashed red line), red bars are outside."],
+    "status-0": ["Conforms to both", "At least the acceptance yield of runs meet both callouts at once."],
+    "status-1": ["⌖ only", "Enough runs come close enough, but too many stray from the street."],
+    "status-2": ["⌒ only", "Runs follow the street tightly, but too few come close enough to the cafe."],
+    "status-3": ["Each alone, not together", "Each callout passes on its own, but they fail on different runs, so too few runs pass both."],
+    "status-4": ["Neither", "Neither callout reaches the acceptance yield."],
+    "status-5": ["Too few runs", "Fewer than 3 runs within R: not enough to judge."],
+  };
+  // infographics for the two callouts: one conforming run and one failing run, scaled to the current slider value
+  const fmt1 = v => (Math.round(v * 10) / 10).toString();
+  function figFrame(x, y, cells) {  // a mini feature control frame
+    let s = "";
+    for (const c of cells) {
+      const w = 12 + [...c].length * 6.6;
+      s += `<rect class="fr" x="${x}" y="${y}" width="${w}" height="18"/><text x="${x + w / 2}" y="${y + 13}" text-anchor="middle">${c}</text>`;
+      x += w;
+    }
+    return s;
+  }
+  const figVerdict = (y, cls, run, text) =>
+    `<line class="${cls}" x1="168" x2="184" y1="${y - 4}" y2="${y - 4}"/><text x="190" y="${y}">${run}</text>` +
+    `<text class="${cls}t" x="168" y="${y + 15}">${text}</text>`;
+  function figPos() {
+    const tol = state.tol, cx = 62, cy = 62, rz = 36, d1 = rz * 0.56, d2 = rz * 1.25;
+    const a1 = Math.round(tol * 0.56), a2 = Math.round(tol * 1.25);  // whole metres, as in the ⌖ frame's actual
+    const lx = cx + rz * 0.71, ly = cy - rz * 0.71;
+    return `<svg class="fig" viewBox="0 0 300 128" aria-hidden="true">` +
+      `<circle class="zone" cx="${cx}" cy="${cy}" r="${rz}"/>` +
+      `<circle class="ok thin" cx="${cx}" cy="${cy}" r="${d1}"/><circle class="bad thin" cx="${cx}" cy="${cy}" r="${d2}"/>` +
+      `<line class="ok" x1="4" x2="150" y1="${cy - d1}" y2="${cy - d1}"/><line class="bad" x1="4" x2="150" y1="${cy + d2}" y2="${cy + d2}"/>` +
+      `<line class="dim" stroke-dasharray="2 2" x1="${cx}" y1="${cy}" x2="${cx}" y2="${cy - d1}"/><text x="${cx - 9}" y="${cy - d1 / 2 + 4}">d</text>` +
+      `<circle class="dot" cx="${cx}" cy="${cy - d1}" r="2"/><circle class="dot" cx="${cx}" cy="${cy}" r="3"/>` +
+      `<rect class="fr" x="${cx + 6}" y="${cy - 1}" width="13" height="14"/><text x="${cx + 12.5}" y="${cy + 10}" text-anchor="middle">A</text>` +
+      `<path class="dim" d="M${lx},${ly} L${lx + 12},${ly - 16} H${lx + 18}"/><text class="zt" x="${lx + 21}" y="${ly - 12}">zone Ø${tol}</text>` +
+      figFrame(168, 4, ["⌖", "Ø" + tol, "A"]) +
+      figVerdict(42, "ok", "run 1", `Ø${a1} ≤ Ø${tol} ✓`) +
+      figVerdict(78, "bad", "run 2", `Ø${a2} > Ø${tol} ✗`) +
+      `<text x="168" y="110" opacity=".8">Ø = 2 × d</text><text x="168" y="124" opacity=".8">d: closest to A</text></svg>`;
+  }
+  function figPro() {
+    const band = state.band, y0 = 52, hb = 22, x0 = 20, x1 = 156, k = band / (2 * hb);
+    const off1 = x => hb * (-0.18 + 0.3 * Math.sin(x / 15) + 0.12 * Math.sin(x / 6.5));
+    const off2 = x => hb * (0.15 + 0.3 * Math.sin(x / 21 + 1) + 1.3 * Math.exp(-(((x - 112) / 13) ** 2)));
+    const trace = f => {
+      const pts = []; let m = { v: -1 };
+      for (let x = x0; x <= x1; x += 2) {
+        const o = f(x); pts.push(`${x},${(y0 + o).toFixed(1)}`);
+        if (Math.abs(o) > m.v) m = { v: Math.abs(o), x, o };
+      }
+      return { pts: pts.join(" "), m };
+    };
+    const t1 = trace(off1), t2 = trace(off2), a1 = fmt1(2 * t1.m.v * k), a2 = fmt1(2 * t2.m.v * k), my = y0 + t2.m.o;
+    return `<svg class="fig" viewBox="0 0 300 128" aria-hidden="true">` +
+      `<rect class="zfill" x="${x0 - 6}" y="${y0 - hb}" width="${x1 - x0 + 12}" height="${2 * hb}"/>` +
+      `<line class="zedge" x1="${x0 - 6}" x2="${x1 + 6}" y1="${y0 - hb}" y2="${y0 - hb}"/><line class="zedge" x1="${x0 - 6}" x2="${x1 + 6}" y1="${y0 + hb}" y2="${y0 + hb}"/>` +
+      `<line class="nom" x1="${x0 - 6}" x2="${x1 + 6}" y1="${y0}" y2="${y0}"/>` +
+      `<path class="dim" d="M4,${y0 - hb} H11 M4,${y0 + hb} H11 M7.5,${y0 - hb} V${y0 + hb}"/>` +
+      `<text class="zt" x="4" y="${y0 - hb - 7}">band ${band} m (±${fmt1(band / 2)})</text>` +
+      `<polyline class="ok" points="${t1.pts}"/><polyline class="bad" points="${t2.pts}"/>` +
+      `<line class="dim" stroke-dasharray="2 2" x1="${t2.m.x}" y1="${y0}" x2="${t2.m.x}" y2="${my}"/>` +
+      `<circle class="bdot" cx="${t2.m.x}" cy="${my}" r="3"/><text x="${t2.m.x + 7}" y="${my + 4}">max</text>` +
+      `<line class="nom" x1="4" x2="30" y1="${y0 + hb + 44}" y2="${y0 + hb + 44}"/><text x="36" y="${y0 + hb + 48}" opacity=".8">street centreline</text>` +
+      figFrame(168, 4, ["⌒", String(band), "A"]) +
+      figVerdict(42, "ok", "run 1", `${a1} ≤ ${band} ✓`) +
+      figVerdict(78, "bad", "run 2", `${a2} > ${band} ✗`) +
+      `<text x="168" y="110" opacity=".8">2 × max |offset|</text><text x="168" y="124" opacity=".8">on the worst pass</text></svg>`;
+  }
+  const tipEl = document.createElement("div");
+  tipEl.id = "tip"; tipEl.setAttribute("role", "tooltip"); tipEl.hidden = true;
+  document.body.append(tipEl);
+  let tipFor = null;
+  function showTip(el) {
+    const t = TIPS[el.dataset.tip];
+    if (!t) return;
+    const b = document.createElement("b"); b.textContent = t[0];
+    tipEl.replaceChildren(b, document.createTextNode(t[1]));
+    if (t[3]) tipEl.insertAdjacentHTML("beforeend", t[3]());
+    if (t[2]) { const d = document.createElement("div"); d.className = "def"; d.textContent = t[2]; tipEl.append(d); }
+    tipEl.hidden = false;
+    const r = el.getBoundingClientRect(), w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+    const x = Math.min(Math.max(8, r.left), window.innerWidth - w - 8);
+    const y = r.bottom + 6 + h > window.innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6;
+    tipEl.style.left = x + "px"; tipEl.style.top = y + "px";
+    if (tipFor && tipFor !== el) tipFor.removeAttribute("aria-describedby");
+    el.setAttribute("aria-describedby", "tip");
+    tipFor = el;
+  }
+  function hideTip() {
+    tipEl.hidden = true;
+    if (tipFor) tipFor.removeAttribute("aria-describedby");
+    tipFor = null;
+  }
+  // non-interactive elements with a tip get a dotted underline and become focusable for the keyboard
+  function decorateTips(root = document) {
+    root.querySelectorAll("[data-tip]").forEach(el => {
+      if (el.matches("input, button, select, textarea, label")) return;
+      el.classList.add("tipped");
+      if (!el.hasAttribute("tabindex")) el.tabIndex = 0;
+    });
+  }
+  document.addEventListener("pointerover", e => {
+    if (e.pointerType !== "mouse") return;
+    const el = e.target.closest("[data-tip]"); if (el) showTip(el);
+  });
+  document.addEventListener("pointerout", e => {
+    if (e.pointerType !== "mouse") return;
+    const el = e.target.closest("[data-tip]");
+    if (el && !el.contains(e.relatedTarget)) hideTip();
+  });
+  document.addEventListener("pointerdown", e => {
+    const el = e.target.closest("[data-tip]");
+    if (e.pointerType === "mouse") { if (el && el.matches("input")) hideTip(); return; }
+    if (el && el.classList.contains("tipped")) { if (tipFor === el) hideTip(); else showTip(el); }  // tap to show on touch
+    else if (el && el.matches('label, input[type="range"]')) showTip(el);  // a tapped slider takes no focus, so show its tip here
+    else if (!el) hideTip();
+  });
+  document.addEventListener("focusin", e => { const el = e.target.closest("[data-tip]"); if (el) showTip(el); });
+  document.addEventListener("focusout", () => hideTip());
+  document.addEventListener("keydown", e => { if (e.key === "Escape") hideTip(); });
+  // a slider moved by keyboard or touch redraws its tip (shown for it or its label), so the infographic follows the value
+  document.addEventListener("input", e => { if (tipFor && tipFor.dataset.tip === e.target.dataset.tip) showTip(e.target); });
+  // keep a keyboard-focused tip attached while the page scrolls (focus itself scrolls into view); drop hover tips
+  window.addEventListener("scroll", () => {
+    if (tipFor && tipFor === document.activeElement) showTip(tipFor); else hideTip();
+  }, true);
+  decorateTips();
 
   // ---------- about: scroll link (keeps the #cafe=... hash) and data sources ----------
   $("about-link").addEventListener("click", e => { e.preventDefault(); $("about").scrollIntoView({ behavior: "smooth", block: "start" }); });
@@ -434,7 +611,7 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
   const visible = r => state.show === "all" || r.status === 0;
   const pct = y => Math.round(100 * y) + "%";
   const ychip = (y, n) => n ? `<span class="chip ${y >= state.acc / 100 - 1e-9 ? "ok" : "bad"}">${pct(y)}</span>` : `<span class="chip mid">–</span>`;
-  const schip = (s, short) => `<span class="chip ${STATUS[s].chip}" title="${esc(STATUS[s].label)}">${esc(short ? STATUS[s].short : STATUS[s].label)}</span>`;
+  const schip = (s, short) => `<span class="chip ${STATUS[s].chip}" data-tip="status-${s}">${esc(short ? STATUS[s].short : STATUS[s].label)}</span>`;
 
   function drawPins() {
     const both = state.res.filter(r => r.status === 0).length;
@@ -461,20 +638,22 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
         || (a.status === 0 ? b.runs - a.runs : b.both - a.both) || b.runs - a.runs || a.i - b.i);
     const shown = rows.slice(0, 300);
     $("cafes").innerHTML = rows.length
-      ? `<thead><tr><th>Cafe</th><th>Runs</th><th>⌖</th><th>⌒</th><th>Both</th><th>Status</th></tr></thead><tbody>` +
+      ? `<thead><tr><th>Cafe</th><th data-tip="col-runs">Runs</th><th data-tip="col-pos">⌖</th><th data-tip="col-pro">⌒</th>` +
+        `<th data-tip="col-both">Both</th><th data-tip="col-status">Status</th></tr></thead><tbody>` +
         shown.map(r => `<tr class="${r.i === state.sel ? "sel" : ""}"><td><button type="button" class="linkbtn" data-i="${r.i}">${esc(cafeName[r.i])}</button></td>
           <td class="num">${r.runs}</td><td class="num">${ychip(r.pos, r.runs)}</td><td class="num">${ychip(r.pro, r.runs)}</td><td class="num">${ychip(r.both, r.runs)}</td>
           <td>${schip(r.status, true)}</td></tr>`).join("") + "</tbody>"
       : `<tbody><tr><td class="muted">No cafe matches. ${state.show === "both" ? "Widen a tolerance or lower the acceptance yield." : ""}</td></tr></tbody>`;
     $("status-line").textContent = rows.length > shown.length ? `Showing the first ${shown.length} of ${rows.length}; search to narrow.` : "";
     $("cafes").querySelectorAll("button[data-i]").forEach(b => b.addEventListener("click", () => select(+b.dataset.i, true)));
+    decorateTips($("cafes"));
   }
 
   function histogram(parts) {
     const maxD = 2 * state.R, bw = Math.max(5, Math.round(maxD / 40 / 5) * 5), nb = Math.ceil(maxD / bw), bins = new Array(nb).fill(0);
     parts.forEach(p => bins[Math.min(nb - 1, Math.floor(2 * p.d / bw))]++);
     const top = Math.max(1, ...bins), W = 320, H = 72, bx = W / nb, tx = Math.min(W, state.tol / maxD * W);
-    let s = `<svg class="hist" viewBox="0 0 ${W} ${H + 30}" role="img" aria-label="Histogram of Ø per run"><text x="0" y="10">Ø of each run (closest approach)</text>`;
+    let s = `<svg class="hist" data-tip="hist" viewBox="0 0 ${W} ${H + 30}" role="img" aria-label="Histogram of Ø per run"><text x="0" y="10">Ø of each run (closest approach)</text>`;
     bins.forEach((c, i) => { if (!c) return; const h = c / top * (H - 18);
       s += `<rect x="${(i * bx + .5).toFixed(1)}" y="${(H - h).toFixed(1)}" width="${Math.max(1, bx - 1).toFixed(1)}" height="${h.toFixed(1)}" class="${(i + .5) * bw <= state.tol ? "ok" : "bad"}"/>`; });
     s += `<line x1="0" y1="${H}" x2="${W}" y2="${H}" class="axis"/><line x1="${tx}" y1="14" x2="${tx}" y2="${H}" class="tol"/>`;
@@ -506,17 +685,18 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
 
     const n = d.parts.length, posN = d.parts.filter(p => p.pos).length, proN = d.parts.filter(p => p.pro).length, bothN = d.parts.filter(p => p.pos && p.pro).length;
     const prof = d.parts.map(p => p.prof).sort((a, b) => a - b), p95 = n ? prof[Math.min(n - 1, Math.round(.95 * (n - 1)))] : 0;
-    const frame = (sym, tol, actual, y) => `<div class="frame-row"><span class="fcf"><span>${sym}</span><span>${tol}</span><span>A</span></span><span class="actual">${actual}</span>${ychip(y, n)}</div>`;
+    const frame = (sym, tol, actual, y, tip) => `<div class="frame-row"><span class="fcf" data-tip="${tip}"><span>${sym}</span><span>${tol}</span><span>A</span></span><span class="actual">${actual}</span>${ychip(y, n)}</div>`;
     $("detail").innerHTML = `<span class="eyebrow">Selected cafe · datum A</span>
       <h3>${esc(cafeName[i])} ${schip(r.status)}</h3>` +
-      (n ? frame(SYM_POS, "Ø" + state.tol, `best Ø${r.best.toFixed(0)} · median Ø${r.med.toFixed(0)} · ${posN}/${n} runs`, r.pos) +
-           frame(SYM_PROF, state.band, `p95 ${p95.toFixed(1)} · ${proN}/${n} runs`, r.pro) +
-           `<div class="frame-row"><span class="actual"><b>both callouts:</b> ${bothN}/${n} runs accepted</span>${ychip(r.both, n)}</div>
+      (n ? frame(SYM_POS, "Ø" + state.tol, `best Ø${r.best.toFixed(0)} · median Ø${r.med.toFixed(0)} · ${posN}/${n} runs`, r.pos, "frame-pos") +
+           frame(SYM_PROF, state.band, `p95 ${p95.toFixed(1)} · ${proN}/${n} runs`, r.pro, "frame-pro") +
+           `<div class="frame-row"><span class="actual" data-tip="frame-both"><b>both callouts:</b> ${bothN}/${n} runs accepted</span>${ychip(r.both, n)}</div>
             <span class="hint">Counts are runs. A run that passes on two streets counts once: its closest approach for ⌖ and its worst pass for ⌒. The street table counts passes.</span>
-            <div class="tablewrap"><table><thead><tr><th>Street (nominal)</th><th>Passes</th><th>⌖</th><th>⌒</th><th>Both</th><th>⌒ p95</th><th>Bias</th></tr></thead><tbody>` +
+            <div class="tablewrap"><table><thead><tr><th data-tip="st-street">Street (nominal)</th><th data-tip="st-passes">Passes</th><th data-tip="st-pos">⌖</th><th data-tip="st-pro">⌒</th><th data-tip="st-both">Both</th><th data-tip="st-p95">⌒ p95</th><th data-tip="st-bias">Bias</th></tr></thead><tbody>` +
            d.feats.map(f => `<tr><td>${esc(f.name)}</td><td class="num">${f.passes}</td><td class="num">${f.pos}</td><td class="num">${f.pro}</td><td class="num">${f.both}</td><td class="num">${f.p95.toFixed(1)}</td><td class="num">${side(f)}</td></tr>`).join("") +
            `</tbody></table></div>` + histogram(d.parts)
          : `<p class="muted">No run passes within R = ${state.R} m of this cafe in the selected years.</p>`);
+    decorateTips($("detail"));
   }
 
   // ---------- GD&T annotations on the map ----------
@@ -636,7 +816,8 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
   bind("tol", "tol", v => "Ø" + v + " m");
   bind("band", "band", v => v + " m");
   bind("acc", "acc", v => v + "%");
-  $("years").innerHTML = '<span class="eyebrow">Years</span>' + years.map(y => `<button type="button" class="chipbtn" data-y="${y}" aria-pressed="true">${y}</button>`).join("");
+  $("years").innerHTML = '<span class="eyebrow" data-tip="years">Years</span>' + years.map(y => `<button type="button" class="chipbtn" data-y="${y}" data-tip="years" aria-pressed="true">${y}</button>`).join("");
+  decorateTips($("years"));
   $("years").querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
     const y = +b.dataset.y;
     if (state.years.has(y) && state.years.size > 1) state.years.delete(y); else state.years.add(y);
@@ -652,7 +833,8 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
   $("show-both").addEventListener("click", () => setShow("both"));
   $("search").addEventListener("input", e => { state.query = e.target.value; table(); });
   $("annot").addEventListener("change", e => { state.annot = e.target.checked; drawAnnotations(); });
-  $("legend").innerHTML = STATUS.map(s => `<span><i style="background:var(${s.color})"></i>${esc(s.label)}</span>`).join("");
+  $("legend").innerHTML = STATUS.map((s, k) => `<span data-tip="status-${k}"><i style="background:var(${s.color})"></i>${esc(s.label)}</span>`).join("");
+  decorateTips($("legend"));
 
   // ---------- start ----------
   M._ct_set_radius(state.R);
