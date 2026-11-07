@@ -1,6 +1,6 @@
 # Architecture
 
-Cafe Tolerance builds one self-contained HTML page. The page inspects the owner's runs past
+Cafe on Runs builds one self-contained HTML page. The page inspects the owner's runs past
 Toronto cafes using two GD&T callouts: **true position** ⌖ and **profile of a line** ⌒.
 
 - **Python** gathers and scrubs the data, then packs it into a compact binary dataset.
@@ -236,7 +236,13 @@ On the real data about one cafe in eight gets a note. `tests/test_gdt.cpp` cover
   - `pt_along_` and `run_len_` are cumulative distances per point and per run, built once in `load`. A gap between parts counts as a straight line.
 - **`run_profile(cafe, run)`:** the points of the run's nearest pass at that cafe, each as (x, offset). Offsets come from the same `offset_of` helper `measure` uses, so strays are measured against the pass's street. x is the position along the street relative to the cafe, on the canonical normal turned clockwise: + east on E–W streets, + north on N–S ones.
 
-### 5.8 Cost
+### 5.8 The lot: `LotStats` and `heat`
+
+- **`LotStats`:** `evaluate(s)` fills it from the same parts it scores the cafes with, so it always matches the cafe statuses: runs in the year mask (every run, not only those near a cafe), total, median and longest km, run–cafe parts and how many met both callouts, the median number of cafes a run passed within R, the run that passed the most, and runs per calendar month from the earliest run's month (empty months included).
+- **`heat(cols, rows, sw, ne, year_mask)`:** a grid over a box, row 0 north, counting **distinct runs** per cell. Each segment between consecutive points of a part is walked at half a cell, so a run counts in every cell it crosses, not only where it logged a point. A per-cell stamp of the last run counted makes an out-and-back run count once; it works because parts are stored run by run.
+- `tests/test_gdt.cpp` covers both: the year mask, the callouts, empty months, an empty lot, shared cells, out-and-back, a two-point segment that crosses every cell, and a bad box.
+
+### 5.9 Cost
 
 - **`load`:** linear in points, with one grid lookup per point.
 - **`set_radius`:** one grid query per cafe, then work linear in the points inside R.
@@ -275,6 +281,8 @@ Strings are read with `UTF8ToString`.
 | `ct_runs_at(lat, lon, r)`, `ct_runs_at_data()` | Number of runs within r m of a point, then f64 × 2 per run: run, distance. Nearest first, year mask of the last `ct_evaluate` (§5.7) |
 | `ct_run_report(run)`, `ct_run_report_data()` | Number of cafes the run passed, then f64 × 9 per cafe in route order: cafe, d, prof, ⌖ ok, ⌒ ok, along (m), street id, q_lat, q_lon |
 | `ct_run_profile(cafe, run)`, `ct_run_profile_data()`, `ct_run_profile_street()` | Number of points, then f64 × 2 per point: x along the street, offset; and the street name id |
+| `ct_lot()` | The lot as of the last `ct_evaluate`: f64 runs, km, median km, longest km, parts, accepted, median cafes, most cafes, its run, first month (year × 12 + month − 1), n months; then n run counts |
+| `ct_heat(cols, rows, s, w, n, e)` | i32 × cols × rows distinct-run counts over the box, row 0 north, year mask of the last `ct_evaluate` (§5.8) |
 
 When adding a function, mark it `EMSCRIPTEN_KEEPALIVE`, add it to the export list in
 `build.sh`, and document its buffer layout here.
@@ -326,7 +334,8 @@ When adding a function, mark it `EMSCRIPTEN_KEEPALIVE`, add it to the export lis
 - **Zoom limit:** the map's `maxBounds` is the City of Toronto box (`opendata.TORONTO`, copied into the page), and `minZoom` is `getBoundsZoom(CITY, true)`, recomputed on resize, so the view never shows beyond the city.
 - **URL hash:** `#cafe=<osm id>&show=both` selects a cafe and the filter on load, and the hash is updated on every selection. Use it to share a view or take screenshots.
 - **Tooltips:** `data-tip` keys on every control, column header, frame and status point into one `TIPS` table. A single `position: fixed` element (`role=tooltip`, linked with `aria-describedby`) shows on mouse hover, keyboard focus or a tap, so scrolling tables never clip it. Escape or moving away hides it. Non-interactive anchors get a dotted underline and `tabindex=0`. A `TIPS` entry may carry a fourth item, a function returning an inline SVG infographic (`figPos`, `figPro`): a schematic zone or band, one conforming and one failing run, and a mini feature control frame, scaled to the current `state.tol` / `state.band`. The figures use `currentColor` for the zone and band and `--tip-ok` / `--tip-bad` for the runs. An `input` event redraws an open slider tip, and on touch a tap on a slider or its label shows the tip, because a tapped range input takes no focus.
-- **About this project:** a static section that explains the project in plain language. It must name no Toronto place but Toronto, because the forbidden-name scan matches substrings. The header's "About" link scrolls with `scrollIntoView`, so the `#cafe=…` hash is kept.
+- **The lot (About → What this is):** `renderLot()` runs on every `refresh()`. Four stat tiles from `ct_lot`, a runs-per-month column chart (an SVG drawn at its real width, redrawn by a `ResizeObserver`), and a run-density map in two `ct_heat` passes: a coarse one over the `CITY` box in 200 m cells finds where the runs go, then a fine one over that box (plus a 4-cell margin, kept between 0.6 and 1.1 times as tall as wide) puts one cell on each device pixel, so the density reads as route lines. Each cell is shaded on a log scale, blended between the stops of one purple ramp (validated as an ordinal ramp against the sheet), over a blurred copy of itself for a soft glow. It is redrawn when the year mask or the width changes. A bar shows a data tip (`showDataTip`, the same `#tip` element); hovering the map counts the runs within 50 m with `ct_runs_at`, and a click centres the map there at zoom 15 without selecting anything. The "most cafes" date opens that run in the run view.
+- **About this project:** a static section that explains the project in plain language. Its sections sit in balanced CSS columns (`columns: 3 320px`), so a tall section leaves no hole beside it. It must name no Toronto place but Toronto, because the forbidden-name scan matches substrings. The header's "About" link scrolls with `scrollIntoView`, so the `#cafe=…` hash is kept.
 - **Data sources:** a table rendered from `ct_meta()` with DOM nodes only. Metadata is never parsed as HTML, and only `https:` links are made. The tile and Leaflet rows are static, because they aren't part of the dataset.
 
 ## 8. GD&T model

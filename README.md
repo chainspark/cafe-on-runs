@@ -1,12 +1,12 @@
-# Cafe Tolerance
+# Cafe on Runs
 
 **GD&T tolerance analysis of GPS runs, with a C++ geometry engine compiled to WebAssembly.**
 
 Live page: https://chainspark.github.io/cafe-on-runs/
 
-How closely do my runs pass Toronto's cafes, specified the way a drawing would? Think of each run
-as one part from the same process. The design intent never changes: follow the street past the
-cafe. Yet every run comes out a little different, because of GPS noise, the sidewalk I took, a road
+How closely do my runs pass Toronto's cafes? Let's think of each running activity captured using
+Garmin smartwatch GPS as one manufactured part. The intent never changes: follow the street past
+the cafe. Yet every run comes out a little different, because of GPS noise, the sidewalk I took, a road
 crossing or a detour, and tolerances decide how much of that variation is acceptable.
 - **The nominal:** the City street centreline.
 - **Datum A:** each cafe.
@@ -26,6 +26,7 @@ crossing or a detour, and tolerances decide how much of that variation is accept
   - **Deterministic:** results are plain geometry with no fitted model, so the same data and settings always give the same answer.
 - **Checker's notes:** the C++ engine decides which facts about a cafe's runs are worth pointing out (`Engine::notes`); the page only words them.
 - **Run inspection:** the engine finds the runs under a click (a grid query, then segment distances) and reports one run across every cafe it passed, in route order, plus its offset profile at a cafe.
+- **The lot:** the engine sums every run in the selected years as it scores the cafes, and grids the runs into a density map that counts distinct runs per cell, walking each segment so a run counts in every cell it crosses.
 - **Tests:** 76 C++ checks, run in a pinned Emscripten Docker image (`bash build.sh test`).
 - **Python pipeline:**
   - reads FIT files, OpenStreetMap and City of Toronto open data
@@ -110,6 +111,7 @@ The page is a dark engineering drawing sheet: a zone-marked border, drawing lett
   - year chips, "All / Conform to both", and search
   - the URL hash `#cafe=<osm id>&show=both` reopens a view
 - **Tooltips:** every parameter, column header, frame and status explains itself. Hover over it, focus it with the keyboard, or tap it on a phone. Each tip includes the default and range where there is one. The position zone and profile band tips also draw a small diagram, with one conforming run and one failing run, labelled with the current slider value and updated as the slider moves.
+- **The lot**, under "What this is" in the About section: every run in the selected years, scored with the current settings. It shows runs, distance, cafes per run (with a link to the run that passed the most) and the share of run–cafe pairs accepted, plus runs per month and a density map of the runs, brighter where more distinct runs overlap. Hover over it to count the runs nearby; click it to zoom the main map there.
 - **About this project**, at the bottom of the page, explains all of this in plain language and lists the data sources recorded in that build.
 
 ## Data sources

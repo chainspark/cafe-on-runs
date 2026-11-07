@@ -251,8 +251,15 @@ int32_t Engine::classify(int runs, double pos, double pro, double both, double a
 }
 
 void Engine::evaluate(const Settings& s) {
+    std::vector<int32_t> cafes_of(ds_.runs.size(), 0);  // cafes each run passed within R
+    LotStats lot;
     for (size_t c = 0; c < passes_.size(); ++c) {
         const auto parts = parts_of(passes_[c], s);
+        for (const auto& p : parts) {
+            ++cafes_of[p.run];
+            ++lot.parts;
+            lot.accepted += p.pos && p.pro;
+        }
         CafeResult r;
         r.runs = int32_t(parts.size());
         if (r.runs) {
@@ -274,6 +281,61 @@ void Engine::evaluate(const Settings& s) {
         r.status = classify(r.runs, r.pos_yield, r.prof_yield, r.both_yield, s.acceptance);
         results_[c] = r;
     }
+    // the lot: every run in the year mask, whether or not it passed a cafe
+    std::vector<double> km, n_cafes;
+    int32_t m0 = INT32_MAX, m1 = INT32_MIN;
+    auto month_of = [](const Run& rn) { return rn.year * 12 + std::max(rn.month, 1) - 1; };
+    for (size_t run = 0; run < ds_.runs.size(); ++run) {
+        if (!in_years(int32_t(run), s.year_mask)) continue;
+        km.push_back(run_len_[run] / 1000.0);
+        n_cafes.push_back(cafes_of[run]);
+        if (cafes_of[run] > lot.most_cafes) { lot.most_cafes = cafes_of[run]; lot.most_cafes_run = int32_t(run); }
+        m0 = std::min(m0, month_of(ds_.runs[run]));
+        m1 = std::max(m1, month_of(ds_.runs[run]));
+    }
+    lot.runs = int32_t(km.size());
+    if (lot.runs) {
+        for (double k : km) lot.km += k;
+        lot.median_km = percentile(km, 0.5);
+        lot.longest_km = *std::max_element(km.begin(), km.end());
+        lot.median_cafes = percentile(n_cafes, 0.5);
+        lot.first_month = m0;
+        lot.per_month.assign(size_t(m1 - m0 + 1), 0);
+        for (size_t run = 0; run < ds_.runs.size(); ++run)
+            if (in_years(int32_t(run), s.year_mask)) ++lot.per_month[size_t(month_of(ds_.runs[run]) - m0)];
+    }
+    lot_ = std::move(lot);
+}
+
+std::vector<int32_t> Engine::heat(int cols, int rows, const LatLon& sw, const LatLon& ne, uint32_t year_mask) const {
+    std::vector<int32_t> count;
+    if (cols <= 0 || rows <= 0 || ne.lat <= sw.lat || ne.lon <= sw.lon) return count;
+    count.assign(size_t(cols) * size_t(rows), 0);
+    std::vector<int32_t> seen(count.size(), -1);  // the last run counted in each cell
+    const P lo = project(sw.lat, sw.lon), hi = project(ne.lat, ne.lon);
+    const double cw = (hi.x - lo.x) / cols, ch = (hi.y - lo.y) / rows;
+    const double step = 0.5 * std::min(cw, ch);   // walk segments at half a cell, so none is skipped
+    auto mark = [&](const P& q, int32_t run) {
+        const double fx = (q.x - lo.x) / cw, fy = (hi.y - q.y) / ch;
+        if (fx < 0 || fy < 0 || fx >= cols || fy >= rows) return;
+        const size_t cell = size_t(fy) * size_t(cols) + size_t(fx);
+        if (seen[cell] != run) { seen[cell] = run; ++count[cell]; }
+    };
+    // parts are stored run by run, so a run's later parts still find its own id in the cells it marked
+    for (size_t k = 0; k + 1 < tr_.part_start.size(); ++k) {
+        const int32_t run = tr_.part_run[k];
+        if (!in_years(run, year_mask)) continue;
+        const int32_t a = tr_.part_start[k], b = tr_.part_start[k + 1];
+        for (int32_t i = a; i < b; ++i) {
+            mark(tr_.p[i], run);
+            if (i + 1 == b) break;
+            const P& p = tr_.p[i];
+            const P& q = tr_.p[i + 1];
+            const int n = int(std::ceil(dist(p, q) / step));
+            for (int j = 1; j < n; ++j) mark({p.x + (q.x - p.x) * j / n, p.y + (q.y - p.y) * j / n}, run);
+        }
+    }
+    return count;
 }
 
 std::vector<Note> Engine::notes(const Detail& d, const Settings& s) {

@@ -1,4 +1,4 @@
-"""Cafe tolerance: export the dataset, compile the C++ engine to WebAssembly, and build the page.
+"""Cafe on Runs: export the dataset, compile the C++ engine to WebAssembly, and build the page.
 
     python -m cafe_tolerance cafes             -> output/cafe_tolerance.html (private, full tracks)
     python -m cafe_tolerance cafes --public    -> privacy-scrubbed page (publish.py uses this)

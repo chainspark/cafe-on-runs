@@ -373,6 +373,72 @@ static void test_run_report() {
     CHECK(e.run_profile(2, 0).pts.empty(), "no profile at a cafe the run never reached");
 }
 
+static Run dated(std::vector<LatLon> pts, int year, int month) {
+    Run r = run(std::move(pts), year);
+    r.month = month;
+    return r;
+}
+
+static void test_lot() {
+    // two runs pass the cafe, one never comes near it; Dec 2024, Jun 2025 and Aug 2025
+    Dataset ds;
+    ds.streets.push_back(street("Main St", -400, 0, 400, 0));
+    ds.runs.push_back(dated(line(-300, 4, 300, 4), 2025, 6));
+    ds.runs.push_back(dated(line(-300, 500, 300, 500), 2025, 8));
+    ds.runs.push_back(dated(line(-200, 4, 200, 4), 2024, 12));
+    ds.cafes.push_back(cafe(0, 10));
+    Engine e = engine(ds);
+    Settings s = settings();
+    e.evaluate(s);
+    LotStats lot = e.lot();
+    CHECK(lot.runs == 3, "the lot counts every run, not only those that passed a cafe");
+    NEAR(lot.km, 1.6, 0.01, "total distance 1.6 km");
+    NEAR(lot.longest_km, 0.6, 0.01, "longest run 0.6 km");
+    NEAR(lot.median_km, 0.6, 0.01, "median run 0.6 km");
+    CHECK(lot.parts == 2 && lot.accepted == 2, "two run-cafe parts, both accepted");
+    NEAR(lot.median_cafes, 1, 1e-9, "the median run passed one cafe");
+    CHECK(lot.most_cafes == 1 && lot.most_cafes_run == 0, "the first run to pass the most cafes is named");
+    CHECK(lot.first_month == 2024 * 12 + 11, "months start at the earliest run (Dec 2024)");
+    CHECK(lot.per_month.size() == 9 && lot.per_month[0] == 1 && lot.per_month[6] == 1 && lot.per_month[8] == 1,
+          "runs per month, empty months included");
+    s.tol_diam = 10;  // Ø12 no longer fits
+    e.evaluate(s);
+    CHECK(e.lot().parts == 2 && e.lot().accepted == 0, "the lot follows the callouts");
+    s = settings();
+    s.year_mask = 1u << (2025 - 2000);
+    e.evaluate(s);
+    lot = e.lot();
+    CHECK(lot.runs == 2 && lot.parts == 1, "the lot follows the year mask");
+    CHECK(lot.first_month == 2025 * 12 + 5 && lot.per_month.size() == 3, "... and so do its months");
+    s.year_mask = 1u << (2020 - 2000);
+    e.evaluate(s);
+    CHECK(e.lot().runs == 0 && e.lot().per_month.empty() && e.lot().most_cafes_run == -1, "an empty lot is empty");
+}
+
+static void test_heat() {
+    // a 800 m x 800 m box in 100 m cells, north edge at y = 700
+    Dataset ds;
+    ds.streets.push_back(street("Main St", -400, 0, 400, 0));
+    ds.runs.push_back(run(line(-290, 4, 290, 4), 2025));                                       // row 6, cols 1-6
+    ds.runs.push_back(run(line(-290, 4, 290, 4), 2025));                                       // row 6, cols 1-6 again
+    ds.runs.push_back(run(concat(line(-290, 500, 290, 500), line(290, 500, -290, 500)), 2024)); // row 2, out and back
+    ds.runs.push_back(run({ll(-350, 650), ll(350, 650)}, 2023));                               // row 0, two points only
+    ds.cafes.push_back(cafe(0, 10));
+    Engine e = engine(ds);
+    const LatLon sw = ll(-400, -100), ne = ll(400, 700);
+    auto h = e.heat(8, 8, sw, ne, 0xffffffffu);
+    auto at = [&](int row, int col) { return h.empty() ? -1 : h[size_t(row * 8 + col)]; };
+    CHECK(h.size() == 64, "one count per cell");
+    CHECK(at(6, 1) == 2 && at(6, 4) == 2 && at(6, 6) == 2 && at(6, 0) == 0 && at(6, 7) == 0, "two runs share the Main St cells");
+    CHECK(at(2, 1) == 1 && at(2, 4) == 1, "an out-and-back run counts once per cell");
+    bool walked = true;
+    for (int c = 0; c < 8; ++c) walked &= at(0, c) == 1;
+    CHECK(walked, "a long segment marks every cell it crosses, not only its two points");
+    h = e.heat(8, 8, sw, ne, 1u << (2025 - 2000));
+    CHECK(at(6, 4) == 2 && at(2, 4) == 0 && at(0, 4) == 0, "the year mask hides the other runs");
+    CHECK(e.heat(0, 8, sw, ne, 0xffffffffu).empty() && e.heat(8, 8, ne, sw, 0xffffffffu).empty(), "a bad box gives nothing");
+}
+
 static void put_u32(std::vector<uint8_t>& b, size_t at, uint32_t v) {
     for (int k = 0; k < 4; ++k) b[at + k] = uint8_t(v >> (8 * k));
 }
@@ -416,6 +482,8 @@ int main() {
     test_notes_engine();
     test_runs_at();
     test_run_report();
+    test_lot();
+    test_heat();
     std::printf("%d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }
