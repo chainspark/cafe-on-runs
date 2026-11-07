@@ -2,7 +2,8 @@
 
 Updating is manual: `python -m cafe_tolerance publish --fetch` pulls new activities, rebuilds the
 scrubbed page and runs the privacy check (page text *and* the dataset compiled into the wasm).
-Review docs/, then commit and push yourself. If the check fails, the generated files are deleted.
+Review docs/, then copy index.html and .nojekyll onto the gh-pages branch and push it yourself
+(GitHub Pages serves that branch; the built page never goes on main). If the check fails, the generated files are deleted.
 """
 from __future__ import annotations
 
@@ -33,5 +34,5 @@ def publish(fetch_new: bool = False, out_dir: Path = SITE, trim_m: float = priva
         for name in PAGES:  # don't leave an unsafe page lying around to be committed
             (out_dir / name).unlink(missing_ok=True)
         raise
-    print(f"\nPublic page ready in {out_dir}/ - open {out_dir / 'index.html'} to review, then commit and push.")
+    print(f"\nPublic page ready in {out_dir}/ - open {out_dir / 'index.html'} to review, then copy it to the gh-pages branch and push.")
     return out_dir
