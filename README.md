@@ -1,9 +1,39 @@
 # Cafe Tolerance
 
-One self-contained web page that asks a half-serious question of my running data: **which Toronto
-cafes do I run past consistently, and how tightly do I hold the line when I do?** It treats my
-Garmin runs like machined parts and inspects them with two GD&T (geometric dimensioning and
-tolerancing) callouts. The street centreline is the drawing and each cafe is the datum.
+**GD&T tolerance analysis of GPS runs, with a C++ geometry engine compiled to WebAssembly.**
+
+How closely do my runs pass Toronto's cafes, specified the way a drawing would? Think of each run
+as one part from the same process. The design intent never changes: follow the street past the
+cafe. Yet every run comes out a little different, because of GPS noise, the sidewalk I took, a road
+crossing or a detour, and tolerances decide how much of that variation is acceptable.
+- **The nominal:** the City street centreline.
+- **Datum A:** each cafe.
+- **Accepted run:** one that meets both callouts:
+  - ⌖ true position: its closest approach to the cafe
+  - ⌒ profile of a line: its worst sideways deviation from the street
+- **A cafe that conforms:** its share of accepted runs reaches the acceptance yield, like a batch passing inspection.
+
+## Engineering highlights
+
+- **Geometry engine:** about 1,200 lines of C++20 in [`wasm/cafe_tol/`](wasm/cafe_tol/), compiled with Emscripten to one WebAssembly page that re-runs the whole inspection as the sliders move.
+  - **Map matching:** each GPS point snaps to the nearest centreline segment within 25 m whose heading is within 35°, ignoring direction. A uniform grid over the segments finds the candidates.
+  - **Blip rejection:** a match to another street shorter than 4 points is treated as noise.
+  - **Pass cutting:** a pass is a run's stretch inside R, split where the matched street changes. Changing R re-cuts every pass.
+  - **Strays:** points that leave the street are measured against the pass's own street, so they count against the profile instead of being dropped.
+  - **Signed offsets:** these use a canonical normal (+ north on east–west streets, + west on north–south ones), so a street's bias reads as a side of the street.
+  - **Deterministic:** results are plain geometry with no fitted model, so the same data and settings always give the same answer.
+- **Tests:** 39 C++ checks, run in a pinned Emscripten Docker image (`bash build.sh test`).
+- **Python pipeline:**
+  - reads FIT files, OpenStreetMap and City of Toronto open data
+  - writes a versioned binary dataset (zigzag varints at 1e-5°, with a provenance header) that is compiled into the module
+- **Edge cases from real data:**
+  - GPS dropouts and privacy holes split a track (any jump over 50 m)
+  - a run that turns a corner makes two passes but counts as one part
+  - chains and non-cafes are excluded by OSM name and brand
+  - R's range of 30–150 m was set by measuring cafe setbacks and the spacing to the next parallel street ([ARCHITECTURE.md §8](ARCHITECTURE.md))
+- **Privacy by construction:**
+  - the public build trims each run's ends and removes privacy zones
+  - the publish step decodes the dataset back out of the compiled WebAssembly and fails if any point falls in a private zone
 
 ## What this project does
 
@@ -18,12 +48,12 @@ tolerancing) callouts. The street centreline is the drawing and each cafe is the
 | GD&T | On the run map |
 |---|---|
 | Drawing (nominal) | City of Toronto street centreline |
-| Datum A / basic dimension | the cafe (OpenStreetMap position) |
+| Datum A / basic dimension | the cafe (OpenStreetMap position), for ⌖ only |
 | Part / lot | one run / all runs within R of the cafe |
 | Inspection (CMM) | the C++ engine, compiled to WebAssembly |
 
 - **⌖ True position:** Ø = 2 × the run's closest approach to the cafe. The run conforms when Ø ≤ the zone (default Ø50 m).
-- **⌒ Profile of a line:** the zone is a band centred on the street centreline (equally disposed). A run's actual profile is 2 × its largest sideways offset, counting every GPS point. It conforms when that is ≤ the band (default 30 m).
+- **⌒ Profile of a line:** the zone is a band centred on the street centreline (equally disposed). A run's actual profile is 2 × its largest sideways offset, counting every GPS point. It conforms when that is ≤ the band (default 30 m). The callout has no datum (`⌒ | 30`): the band follows the street, and the cafe's R circle only picks which stretch is inspected.
 - **Accepted run:** meets both callouts at once.
 - **Conforms to both:** at least the acceptance yield (default 75%) of a cafe's runs are accepted, from at least 3 runs.
   - Other statuses: ⌖ only, ⌒ only, *each alone, not together* (both yields pass on their own, but the failures fall on different runs), neither, and too few runs.
@@ -48,7 +78,7 @@ roasters stay in.
     - a datum-A symbol on the cafe
     - a `⌖ | Ø50 | A` feature control frame on a leader to the position zone, with the actual best and median Ø and the run yield
     - a dimension line to the best run's closest point
-    - for the top three streets, a band-width dimension and a `⌒ | 30 | A` frame with the street's p95 actual and pass yield
+    - for the top three streets, a band-width dimension and a `⌒ | 30` frame with the street's p95 actual and pass yield
 
   The panel shows both feature control frames with actual values and yields, a per-street table with bias, and a histogram of Ø.
 - **Controls:**

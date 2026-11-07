@@ -283,11 +283,11 @@ When adding a function, mark it `EMSCRIPTEN_KEEPALIVE`, add it to the export lis
 | GD&T concept | Implementation |
 |---|---|
 | Drawing / nominal | City of Toronto street centreline piece |
-| Datum A, basic dimension | Cafe position (OSM), exact |
+| Datum A, basic dimension | Cafe position (OSM), exact. Referenced by ⌖ only |
 | Feature | A street (by name) near the cafe |
 | Part / lot | One run / all runs within R of the cafe |
 | ⌖ true position | Ø = 2 × closest approach of the run. Conforms if Ø ≤ Ø_tol |
-| ⌒ profile of a line, equally disposed | 2 × max \|offset\| from the centreline, the run's worst pass. Conforms if ≤ band |
+| ⌒ profile of a line, equally disposed, no datum | 2 × max \|offset\| from the centreline, the run's worst pass. Conforms if ≤ band. Form only (`⌒ \| band`): the band follows the street, and R picks the stretch inspected |
 | Accepted part | Meets both callouts |
 | Lot acceptance | Combined yield ≥ acceptance level, with ≥ 3 runs |
 | Unequal disposition | Reported as **bias** (mean signed offset), not toleranced |

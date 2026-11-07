@@ -155,9 +155,9 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
 <div class="sheet">
   <header>
     <div class="intro">
-      <span class="eyebrow">GD&amp;T inspection · runs past Toronto cafes</span>
+      <span class="eyebrow">GD&amp;T tolerance analysis of GPS runs · C++ geometry engine in WebAssembly</span>
       <h1>Cafe Tolerance</h1>
-      <p class="muted">Each run is a part from a production lot, the City street centreline is the drawing, and each cafe is datum A. A run is <b>accepted</b> when it meets both callouts: ⌖ true position (how close it came) and ⌒ profile of a line (how tightly it followed the street). A cafe <b>conforms to both</b> when enough of its runs are accepted.</p>
+      <p class="muted">How closely do my runs pass Toronto's cafes, specified the way a drawing would? Think of each run as one part from the same process. The design intent never changes: follow the street past the cafe. Yet every run comes out a little different, because of GPS noise, the sidewalk I took, a road crossing or a detour, and tolerances decide how much of that variation is acceptable. The City street centreline is the nominal, and each cafe is datum A. A run is <b>accepted</b> when it meets both callouts: ⌖ true position (its closest approach to the cafe, Ø = 2d) and ⌒ profile of a line (its worst sideways deviation from the street). A cafe <b>conforms to both</b> when its share of accepted runs reaches the acceptance yield, like a batch passing inspection. Every check runs in your browser, in a C++ geometry engine compiled to WebAssembly, and is redone as you move the tolerances.</p>
       <p><a href="#about" id="about-link">About this project and its data sources ↓</a></p>
     </div>
     <div class="tblock" aria-label="Title block">
@@ -205,7 +205,7 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
     <div class="about-grid">
       <section>
         <h3>What this is</h3>
-        <p>A personal project. It lays every run I've recorded on my Garmin watch inside the City of Toronto over the city's cafes, and inspects the runs the way a machinist inspects parts. Each run is a <b>part</b>, the City's street centreline is the <b>drawing</b>, and each cafe is <b>datum A</b>.</p>
+        <p>A personal project. It lays every run I've recorded on my Garmin watch inside the City of Toronto over the city's cafes, and inspects the runs the way a machinist inspects parts. Each run is a <b>part</b> made by the same process, the City's street centreline is the <b>nominal</b>, and each cafe is <b>datum A</b>.</p>
         <p>The half-serious question it answers: which cafes do I run past again and again, and how tightly do I hold the line when I do? The data and a C++ geometry engine compiled to WebAssembly are both inside this one file, and nothing you do here is sent anywhere.</p>
       </section>
       <section>
@@ -228,8 +228,8 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
         <h3>The two callouts</h3>
         <div class="frame-row"><span class="fcf"><span><svg viewBox="0 0 16 16" aria-label="position"><circle cx="8" cy="8" r="4.5"/><path d="M8 1v14M1 8h14"/></svg></span><span>Ø50</span><span>A</span></span>
           <span class="actual">the run must pass through a circle 50 m across, centred on the cafe. A run's Ø is twice its closest distance to the cafe.</span></div>
-        <div class="frame-row"><span class="fcf"><span><svg viewBox="0 0 16 16" aria-label="profile of a line"><path d="M2 12a6 6 0 0 1 12 0"/></svg></span><span>30</span><span>A</span></span>
-          <span class="actual">every GPS point must stay inside a 30 m strip centred on the street.</span></div>
+        <div class="frame-row"><span class="fcf"><span><svg viewBox="0 0 16 16" aria-label="profile of a line"><path d="M2 12a6 6 0 0 1 12 0"/></svg></span><span>30</span></span>
+          <span class="actual">every GPS point must stay inside a 30 m strip centred on the street. It has no datum: the band follows the street, and the cafe's R circle only picks which stretch is inspected.</span></div>
         <p>A run is <b>accepted</b> when it meets both callouts. A cafe <b>conforms to both</b> when its share of accepted runs reaches the acceptance yield (75% by default), from at least 3 runs.</p>
         <ul>
           <li><b>Each alone, not together:</b> each callout passes on its own, but they fail on different runs, so too few runs pass both.</li>
@@ -282,6 +282,8 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
   ];
   const SYM_POS = '<svg viewBox="0 0 16 16" aria-label="position"><circle cx="8" cy="8" r="4.5"/><path d="M8 1v14M1 8h14"/></svg>';
   const SYM_PROF = '<svg viewBox="0 0 16 16" aria-label="profile of a line"><path d="M2 12a6 6 0 0 1 12 0"/></svg>';
+  // ⌖ is located from datum A (the cafe). ⌒ is form only: the band follows the street, and R just picks the stretch inspected.
+  const datumCell = sym => sym === SYM_PROF ? "" : "<span>A</span>";
   const $ = id => document.getElementById(id);
   const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
@@ -308,7 +310,7 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
     "col-both": ["Combined yield", "Share of runs accepted, meaning they meet ⌖ and ⌒ at once. This decides whether the cafe conforms to both."],
     "col-status": ["Status", "Conforms to both, ⌖ only, ⌒ only, apart (each callout passes alone but on different runs), neither, or few (fewer than 3 runs)."],
     "frame-pos": ["⌖ | Ø | A: true position", "Read: each run must pass through a circle of this diameter centred on datum A, the cafe. The actual shows the best and median Ø and how many runs conform."],
-    "frame-pro": ["⌒ | band | A: profile of a line", "Read: every GPS point must stay inside a strip of this width centred on the street. The actual shows the 95th-percentile run and how many runs conform."],
+    "frame-pro": ["⌒ | band: profile of a line", "Read: every GPS point must stay inside a strip of this width centred on the street. There is no datum: the band follows the street, and the cafe's R circle only picks which stretch is inspected. The actual shows the 95th-percentile run and how many runs conform."],
     "frame-both": ["Both callouts", "Runs accepted because they meet both callouts at once. This combined yield decides the cafe's status."],
     "st-street": ["Street (nominal)", "The City centreline the passes are measured against: the drawing's nominal line."],
     "st-passes": ["Passes", "Stretches of runs on this street inside R. A run that went by twice counts twice here."],
@@ -379,7 +381,7 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
       `<line class="dim" stroke-dasharray="2 2" x1="${t2.m.x}" y1="${y0}" x2="${t2.m.x}" y2="${my}"/>` +
       `<circle class="bdot" cx="${t2.m.x}" cy="${my}" r="3"/><text x="${t2.m.x + 7}" y="${my + 4}">max</text>` +
       `<line class="nom" x1="4" x2="30" y1="${y0 + hb + 44}" y2="${y0 + hb + 44}"/><text x="36" y="${y0 + hb + 48}" opacity=".8">street centreline</text>` +
-      figFrame(168, 4, ["⌒", String(band), "A"]) +
+      figFrame(168, 4, ["⌒", String(band)]) +  // form only: no datum
       figVerdict(42, "ok", "run 1", `${a1} ≤ ${band} ✓`) +
       figVerdict(78, "bad", "run 2", `${a2} > ${band} ✗`) +
       `<text x="168" y="110" opacity=".8">2 × max |offset|</text><text x="168" y="124" opacity=".8">on the worst pass</text></svg>`;
@@ -686,7 +688,7 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
 
     const n = d.parts.length, posN = d.parts.filter(p => p.pos).length, proN = d.parts.filter(p => p.pro).length, bothN = d.parts.filter(p => p.pos && p.pro).length;
     const prof = d.parts.map(p => p.prof).sort((a, b) => a - b), p95 = n ? prof[Math.min(n - 1, Math.round(.95 * (n - 1)))] : 0;
-    const frame = (sym, tol, actual, y, tip) => `<div class="frame-row"><span class="fcf" data-tip="${tip}"><span>${sym}</span><span>${tol}</span><span>A</span></span><span class="actual">${actual}</span>${ychip(y, n)}</div>`;
+    const frame = (sym, tol, actual, y, tip) => `<div class="frame-row"><span class="fcf" data-tip="${tip}"><span>${sym}</span><span>${tol}</span>${datumCell(sym)}</span><span class="actual">${actual}</span>${ychip(y, n)}</div>`;
     $("detail").innerHTML = `<span class="eyebrow">Selected cafe · datum A</span>
       <h3>${esc(cafeName[i])} ${schip(r.status)}</h3>` +
       (n ? frame(SYM_POS, "Ø" + state.tol, `best Ø${r.best.toFixed(0)} · median Ø${r.med.toFixed(0)} · ${posN}/${n} runs`, r.pos, "frame-pos") +
@@ -711,7 +713,7 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
   const annHtml = (p, html, cls = "") => L.marker(toLL(p), { pane: "annot", interactive: false, keyboard: false,
     icon: L.divIcon({ className: "anno " + cls, html, iconSize: [0, 0] }) }).addTo(annot);
   const annFrame = (p, sym, tol, act, left) => annHtml(p,
-    `<div class="box"><div class="fr"><span>${sym}</span><span>${esc(tol)}</span><span>A</span></div><div class="act">${act}</div></div>`, left ? "left" : "");
+    `<div class="box"><div class="fr"><span>${sym}</span><span>${esc(tol)}</span>${datumCell(sym)}</div><div class="act">${act}</div></div>`, left ? "left" : "");
   const yieldTxt = (k, n) => { const y = n ? k / n : 0; return `<b class="${y >= state.acc / 100 - 1e-9 ? "ok" : "bad"}">${k}/${n} runs · ${pct(y)}</b>`; };
   // Callouts are laid out like a drawing: frames sit in two columns just outside the R circle (left
   // and right of the cafe), each at the height of the feature it points to, stacked so they don't
