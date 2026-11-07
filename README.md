@@ -111,7 +111,7 @@ The page is a dark engineering drawing sheet: a zone-marked border, drawing lett
   - year chips, "All / Conform to both", and search
   - the URL hash `#cafe=<osm id>&show=both` reopens a view
 - **Tooltips:** every parameter, column header, frame and status explains itself. Hover over it, focus it with the keyboard, or tap it on a phone. Each tip includes the default and range where there is one. The position zone and profile band tips also draw a small diagram, with one conforming run and one failing run, labelled with the current slider value and updated as the slider moves.
-- **The lot**, under "What this is" in the About section: every run in the selected years, scored with the current settings. It shows runs, distance, cafes per run (with a link to the run that passed the most) and the share of run–cafe pairs accepted, plus runs per month and a map of how many distinct runs crossed each 200 m square. A click on the map zooms the main map there.
+- **The lot**, under "What this is" in the About section: every run in the selected years, scored with the current settings. It shows runs, distance, cafes per run (with a link to the run that passed the most) and the share of run–cafe pairs accepted, plus runs per month and a density map of the runs, brighter where more distinct runs overlap. Hover over it to count the runs nearby; click it to zoom the main map there.
 - **About this project**, at the bottom of the page, explains all of this in plain language and lists the data sources recorded in that build.
 
 ## Data sources
