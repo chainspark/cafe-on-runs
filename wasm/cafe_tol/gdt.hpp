@@ -115,6 +115,18 @@ struct RunProfile {
     std::vector<ProfilePt> pts;
 };
 
+// ---- the lot: every run in the year mask, summarised across every cafe ----
+// Filled by evaluate() with its settings, from the same parts the cafe statuses are built on.
+struct LotStats {
+    int32_t runs = 0;                 // runs in the year mask
+    double km = 0, median_km = 0, longest_km = 0;
+    int32_t parts = 0, accepted = 0;  // run-cafe pairs within R; ... meeting both callouts
+    double median_cafes = 0;          // cafes passed within R by the median run
+    int32_t most_cafes = 0, most_cafes_run = -1;
+    int32_t first_month = 0;          // year * 12 + month - 1 of the earliest run (0 when there are none)
+    std::vector<int32_t> per_month;   // runs per calendar month, from first_month to the latest run's month
+};
+
 class Engine {
 public:
     bool load(Dataset ds, std::string& err);
@@ -133,6 +145,12 @@ public:
     // The run's offset profile at one cafe (empty if it didn't pass within R).
     RunProfile run_profile(int cafe, int run) const;
     double run_length(int run) const { return run >= 0 && size_t(run) < run_len_.size() ? run_len_[run] : 0; }
+    const LotStats& lot() const { return lot_; }
+    // Run density: how many distinct runs (in the year mask) cross each cell of a cols x rows grid laid
+    // over the box sw..ne, row-major with row 0 at the north edge. Each segment between consecutive
+    // points of a part is walked, so a run counts in every cell it crosses, not only where it logged a
+    // point, and a run that crosses a cell twice still counts once.
+    std::vector<int32_t> heat(int cols, int rows, const LatLon& sw, const LatLon& ne, uint32_t year_mask) const;
 
     const Dataset& data() const { return ds_; }
     const Track& track() const { return tr_; }
@@ -158,6 +176,7 @@ private:
     std::vector<P> cafe_xy_;
     std::vector<std::vector<Pass>> passes_;
     std::vector<CafeResult> results_;
+    LotStats lot_;
     std::vector<float> pt_along_;   // distance along its run to each point (m); gaps count as straight lines
     std::vector<double> run_len_;
     double radius_ = 0;

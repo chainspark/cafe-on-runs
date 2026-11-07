@@ -223,11 +223,35 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
 /* a checker's note written on the map next to the selected cafe */
 .anno.note .pen { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); font: 700 20px/1.1 var(--f-pen); color: var(--note);
   white-space: nowrap; text-shadow: 0 0 3px #1c2026, 0 0 3px #1c2026, 0 0 6px #1c2026 }
-.about-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 18px 36px }
+/* balanced columns, so a tall section doesn't leave a hole beside it (a row-based grid did) */
+.about-grid { columns: 3 320px; column-gap: 36px }
+.about-grid > section { break-inside: avoid; margin: 0 0 22px }
 .about section { display: grid; gap: 7px; align-content: start; min-width: 0 }
 .about ul { margin: 0; padding-left: 18px; display: grid; gap: 4px }
 .about p { max-width: 70ch }
 .about a, .intro a { color: var(--accent); text-underline-offset: 3px }
+/* the lot: run stats and a run-density map, under "What this is" */
+.lot { display: grid; gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--rule) }
+.lot .hint { margin: 0 }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: 8px }
+.kpi { border: 1px solid var(--rule); background: var(--field); padding: 8px 10px; display: grid; gap: 2px; align-content: start; min-width: 0 }
+.kpi .k { font: 500 11.5px var(--f-display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); justify-self: start }
+.kpi .v { font: 600 22px/1.15 var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums }
+.kpi .s { font-size: 12px; color: var(--muted) }
+.lot-fig { margin: 0; display: grid; gap: 5px }
+.lot-fig figcaption { font: 500 12.5px var(--f-display); letter-spacing: .08em; text-transform: uppercase; color: var(--ink) }
+.lot-fig figcaption .hint { text-transform: none; letter-spacing: 0; font-family: var(--f-body) }
+#lot-months { width: 100%; height: auto; display: block }
+#lot-months text { font: 500 10.5px var(--f-mono); fill: var(--muted) }
+#lot-months .bar { fill: #9a90f0 } #lot-months .bar.on { fill: #e8e4ff }
+#lot-months .hit { fill: transparent } #lot-months .base { stroke: var(--rule) }
+.heat { position: relative; border: 1px solid var(--rule); background: var(--field); cursor: crosshair; touch-action: manipulation }
+.heat canvas { display: block; width: 100%; height: auto; image-rendering: pixelated }
+.heat svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible }
+.heat svg text { font: 600 11px var(--f-mono); fill: var(--muted) } .heat svg .scale { stroke: var(--muted); stroke-width: 1.5; fill: none }
+.heat svg .cell { fill: none; stroke: #fff; stroke-width: 1.5 }
+.heat-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font: 11.5px var(--f-mono); color: var(--muted); align-items: center }
+.heat-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 5px; vertical-align: -2px }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--frame); vertical-align: -1px }
 #sources td { vertical-align: top } #sources td:first-child { font-weight: 600; white-space: nowrap }
 </style>
@@ -311,6 +335,20 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
         <h3>What this is</h3>
         <p>A personal project. It lays every run I've recorded on my Garmin watch inside the City of Toronto over the city's cafes, and inspects the runs the way a machinist inspects parts. Each run is a <b>part</b> made by the same process, the City's street centreline is the <b>nominal</b>, and each cafe is <b>datum A</b>.</p>
         <p>The half-serious question it answers: which cafes do I run past again and again, and how tightly do I hold the line when I do? The data and a C++ geometry engine compiled to WebAssembly are both inside this one file, and nothing you do here is sent anywhere.</p>
+        <div class="lot" id="lot">
+          <h3><span data-tip="lot">The lot</span></h3>
+          <p class="hint" id="lot-scope"></p>
+          <div class="kpis" id="lot-kpis"></div>
+          <figure class="lot-fig">
+            <figcaption>Runs per month <span class="hint" id="lot-peak"></span></figcaption>
+            <svg id="lot-months" role="img"></svg>
+          </figure>
+          <figure class="lot-fig">
+            <figcaption>Where the runs go <span class="hint">distinct runs per 200 m square · click to zoom the map there</span></figcaption>
+            <div class="heat" id="lot-heat-wrap"><canvas id="lot-heat" role="img"></canvas><svg id="lot-heat-over" aria-hidden="true"></svg></div>
+            <div class="heat-legend" id="heat-legend"></div>
+          </figure>
+        </div>
       </section>
       <section>
         <h3>Reading the map</h3>
@@ -445,6 +483,11 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
     "runs-table": ["Runs at this cafe", "One row per run (part) that came within R: its Ø (twice the closest approach), its ⌒ actual (twice its largest offset), the two verdicts and the result. Click a row to inspect that run."],
     "run-strip": ["Route strip", "The run as one line from start to finish. Each mark is a cafe, placed where along the run it was passed: filled = accepted, hollow = rejected. Click one to select that cafe."],
     "run-profile": ["This run at the cafe", "The run's sideways offset from the centreline along the street inside R, against the profile band. Its ⌒ actual is twice the largest offset."],
+    "lot": ["The lot", "In inspection, the lot is every part the process made. Here it is every run in the selected years, scored at every cafe with the current settings. It follows the sliders and the year chips."],
+    "lot-runs": ["Runs", "Runs inside the City in the selected years, whether or not they passed a cafe."],
+    "lot-km": ["Distance", "Total distance of those runs, inside the City only."],
+    "lot-cafes": ["Cafes per run", "How many cafes the median run passed within R, and the run that passed the most. Its date opens it in the run view."],
+    "lot-acc": ["Accepted at a cafe", "Of every run–cafe pair within R, the share where the run met both callouts (⌖ and ⌒) at that cafe."],
     "hist": ["Ø of each run", "Distribution of the runs' closest approach as a diameter. Green bars are inside the position zone (dashed red line), red bars are outside."],
     "status-0": ["Conforms to both", "At least the acceptance yield of runs meet both callouts at once."],
     "status-1": ["⌖ only", "Enough runs come close enough, but too many stray from the street."],
@@ -523,14 +566,25 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
     tipEl.replaceChildren(b, document.createTextNode(t[1]));
     if (t[3]) tipEl.insertAdjacentHTML("beforeend", t[3]());
     if (t[2]) { const d = document.createElement("div"); d.className = "def"; d.textContent = t[2]; tipEl.append(d); }
-    tipEl.hidden = false;
-    const r = el.getBoundingClientRect(), w = tipEl.offsetWidth, h = tipEl.offsetHeight;
-    const x = Math.min(Math.max(8, r.left), window.innerWidth - w - 8);
-    const y = r.bottom + 6 + h > window.innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6;
-    tipEl.style.left = x + "px"; tipEl.style.top = y + "px";
+    placeTip(el.getBoundingClientRect());
     if (tipFor && tipFor !== el) tipFor.removeAttribute("aria-describedby");
     el.setAttribute("aria-describedby", "tip");
     tipFor = el;
+  }
+  // below the rect r when it fits, above it otherwise, kept inside the window
+  function placeTip(r) {
+    tipEl.hidden = false;
+    const w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+    const x = Math.min(Math.max(8, r.left), window.innerWidth - w - 8);
+    const y = r.bottom + 6 + h > window.innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6;
+    tipEl.style.left = x + "px"; tipEl.style.top = y + "px";
+  }
+  // a tip for one data mark (a bar, a heat cell): a title and a line of text at rect r
+  function showDataTip(r, title, text) {
+    if (tipFor) { tipFor.removeAttribute("aria-describedby"); tipFor = null; }
+    const b = document.createElement("b"); b.textContent = title;
+    tipEl.replaceChildren(b, document.createTextNode(text));
+    placeTip(r);
   }
   function hideTip() {
     tipEl.hidden = true;
@@ -1090,7 +1144,151 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
     drawPins(); table(); drawDetail(); drawRun(); renderRunReport(); viewChrome();
   }
 
-  function refresh() { evaluate(); drawPins(); table(); drawDetail(); drawRun(); renderRunReport(); viewChrome(); }
+  // ---------- the lot (About): the engine sums the runs (LotStats, ct_lot) and grids them (ct_heat); the page draws ----------
+  const HEAT_CELL_M = 200, KX = 111320 * Math.cos(43.7 * Math.PI / 180), KY = 110540;  // the engine's projection
+  const HEAT_COLS = Math.round((CITY.getEast() - CITY.getWest()) * KX / HEAT_CELL_M);
+  const HEAT_ROWS = Math.round((CITY.getNorth() - CITY.getSouth()) * KY / HEAT_CELL_M);
+  const HEAT_FIT_PX = 440, HEAT_PAD = 4;  // the drawing is cropped to the runs (+ a margin of cells) and fitted to ~440 px
+  let hv = null;  // the cropped view: first col / row, size in cells, canvas pixels per cell
+  // one hue, darker = fewer runs; validated as an ordinal ramp against the sheet (lowest step 2.2:1)
+  const HEAT_RAMP = ["#4d4794", "#6259b6", "#7a6fd6", "#9a90f0", "#c0b8ff", "#e8e4ff"];
+  const HEAT_BINS = [[1, "1"], [2, "2–3"], [4, "4–9"], [10, "10–29"], [30, "30–99"], [100, "100+"]];
+  const heatBin = n => { let k = -1; for (let j = 0; j < HEAT_BINS.length; j++) if (n >= HEAT_BINS[j][0]) k = j; return k; };
+  const monthName = m => MON[m % 12] + " " + Math.floor(m / 12);
+  const fmtInt = n => Math.round(n).toLocaleString("en-CA");
+  let heat = null, heatMask = null, lotMonths = null;
+
+  function renderLot() {
+    const p = M._ct_lot(), H = f64(p, 11), nm = H[10], D = Array.from(f64(p, 11 + nm));
+    const [runs, kmTot, kmMed, kmMax, parts, acc, medCafes, most, mostRun, m0] = D;
+    const perMonth = D.slice(11);
+    lotMonths = { m0, perMonth };
+    const ys = years.filter(y => state.years.has(y));
+    $("lot-scope").textContent = runs
+      ? `${monthName(m0)} – ${monthName(m0 + nm - 1)} · years ${ys.join(", ")} · scored with the current settings`
+      : "No runs in the selected years.";
+    const tile = (tip, k, v, s) => `<div class="kpi"><span class="k" data-tip="${tip}">${k}</span><span class="v">${v}</span><span class="s">${s}</span></div>`;
+    $("lot-kpis").innerHTML = runs ? [
+      tile("lot-runs", "Runs", fmtInt(runs), `${perMonth.filter(n => n).length} of ${nm} months`),
+      tile("lot-km", "Distance", fmtInt(kmTot) + " km", `median ${kmMed.toFixed(1)} · longest ${kmMax.toFixed(1)} km`),
+      tile("lot-cafes", "Cafes per run", fmtInt(medCafes),
+        most ? `median · most ${most}, <button type="button" class="linkbtn" data-run="${mostRun}">${runDate(mostRun)}</button>` : "median"),
+      tile("lot-acc", "Accepted at a cafe", parts ? Math.round(100 * acc / parts) + "%" : "–", `${fmtInt(acc)} of ${fmtInt(parts)} run–cafe pairs`),
+    ].join("") : "";
+    decorateTips($("lot-kpis"));
+    drawMonths(m0, perMonth);
+    if (heatMask !== yearMask()) { heatMask = yearMask(); drawHeat(); }
+  }
+  $("lot-kpis").addEventListener("click", e => {
+    const b = e.target.closest("button[data-run]"); if (!b) return;
+    selectRun(+b.dataset.run);
+    document.querySelector(".mapwrap").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  // runs per calendar month: one series, so no legend; each bar has a hover tip
+  function drawMonths(m0, perMonth) {
+    // drawn at its real width, so the labels keep their size on a phone
+    const svg = $("lot-months"), n = perMonth.length, W = Math.max(240, Math.round(svg.parentElement.clientWidth) || 480), BH = 64, top = 4;
+    if (!n) { svg.innerHTML = ""; $("lot-peak").textContent = ""; svg.setAttribute("viewBox", `0 0 ${W} 1`); return; }
+    const max = Math.max(...perMonth), slot = W / n, bw = Math.max(1, Math.min(14, slot - 2));
+    const peak = perMonth.indexOf(max);
+    $("lot-peak").textContent = `peak ${max} in ${monthName(m0 + peak)}`;
+    let s = "";
+    perMonth.forEach((v, k) => {
+      const x = k * slot + (slot - bw) / 2, h = v ? Math.max(2, BH * v / max) : 0;
+      if (h) s += `<path class="bar" data-k="${k}" d="M${x},${top + BH} V${top + BH - h + 2} q0,-2 2,-2 H${x + bw - 2} q2,0 2,2 V${top + BH} Z"/>`;
+      s += `<rect class="hit" data-k="${k}" x="${k * slot}" y="0" width="${slot}" height="${top + BH + 18}"/>`;
+      const m = m0 + k;
+      if (m % 12 === 0 || (k === 0 && 12 - (m % 12) >= 3)) s += `<text x="${k * slot + 1}" y="${top + BH + 14}">${m % 12 === 0 ? Math.floor(m / 12) : monthName(m)}</text>`;
+    });
+    s += `<line class="base" x1="0" x2="${W}" y1="${top + BH + 0.5}" y2="${top + BH + 0.5}"/>`;
+    svg.setAttribute("viewBox", `0 0 ${W} ${top + BH + 18}`);
+    svg.setAttribute("aria-label", `Runs per month, ${monthName(m0)} to ${monthName(m0 + n - 1)}; peak ${max} in ${monthName(m0 + peak)}`);
+    svg.innerHTML = s;
+  }
+  let monthsW = 0;
+  new ResizeObserver(() => {
+    const w = Math.round($("lot-months").parentElement.clientWidth);
+    if (lotMonths && w !== monthsW) { monthsW = w; drawMonths(lotMonths.m0, lotMonths.perMonth); }
+  }).observe($("lot"));
+  $("lot-months").addEventListener("pointermove", e => {
+    const hit = e.target.closest("[data-k]");
+    $("lot-months").querySelectorAll(".bar.on").forEach(b => b.classList.remove("on"));
+    if (!hit || !lotMonths) { hideTip(); return; }
+    const k = +hit.dataset.k, v = lotMonths.perMonth[k];
+    const bar = $("lot-months").querySelector(`.bar[data-k="${k}"]`); if (bar) bar.classList.add("on");
+    showDataTip((bar || hit).getBoundingClientRect(), monthName(lotMonths.m0 + k), `${v} run${v === 1 ? "" : "s"}`);
+  });
+  $("lot-months").addEventListener("pointerleave", () => {
+    $("lot-months").querySelectorAll(".bar.on").forEach(b => b.classList.remove("on")); hideTip();
+  });
+
+  // run density over the City box: the engine counts distinct runs per cell, the page paints the bins
+  function drawHeat() {
+    const n = HEAT_COLS * HEAT_ROWS;
+    heat = Array.from(i32(M._ct_heat(HEAT_COLS, HEAT_ROWS, CITY.getSouth(), CITY.getWest(), CITY.getNorth(), CITY.getEast()), n));
+    // crop to the cells the runs reach, plus a margin, inside the City box
+    let c0 = HEAT_COLS, c1 = -1, r0 = HEAT_ROWS, r1 = -1, cells = 0, max = 0;
+    for (let i = 0; i < n; i++) {
+      if (!heat[i]) continue;
+      const col = i % HEAT_COLS, row = Math.floor(i / HEAT_COLS);
+      c0 = Math.min(c0, col); c1 = Math.max(c1, col); r0 = Math.min(r0, row); r1 = Math.max(r1, row);
+      cells++; max = Math.max(max, heat[i]);
+    }
+    if (c1 < 0) { c0 = 0; c1 = HEAT_COLS - 1; r0 = 0; r1 = HEAT_ROWS - 1; }
+    c0 = Math.max(0, c0 - HEAT_PAD); c1 = Math.min(HEAT_COLS - 1, c1 + HEAT_PAD);
+    r0 = Math.max(0, r0 - HEAT_PAD); r1 = Math.min(HEAT_ROWS - 1, r1 + HEAT_PAD);
+    const cols = c1 - c0 + 1, rows = r1 - r0 + 1, px = Math.max(2, Math.min(8, Math.floor(HEAT_FIT_PX / cols)));
+    hv = { c0, r0, cols, rows, px };
+    const c = $("lot-heat");
+    c.width = cols * px; c.height = rows * px;
+    const ctx = c.getContext("2d");
+    ctx.clearRect(0, 0, c.width, c.height);
+    for (let row = r0; row <= r1; row++)
+      for (let col = c0; col <= c1; col++) {
+        const k = heatBin(heat[row * HEAT_COLS + col]); if (k < 0) continue;
+        ctx.fillStyle = HEAT_RAMP[k];
+        ctx.fillRect((col - c0) * px, (row - r0) * px, px, px);
+      }
+    c.setAttribute("aria-label", `Map of run density in the City: ${fmtInt(cells)} squares of ${HEAT_CELL_M} m crossed by at least one run, up to ${max} runs in one square`);
+    // a drawing's scale bar and north arrow, in canvas units
+    const W = c.width, Hh = c.height, km = (W > 300 ? 2000 : 1000), kmPx = km / HEAT_CELL_M * px, x0 = W - kmPx - 14, y0 = Hh - 12;
+    $("lot-heat-over").setAttribute("viewBox", `0 0 ${W} ${Hh}`);
+    $("lot-heat-over").innerHTML =
+      `<path class="scale" d="M${x0},${y0 - 5} V${y0} H${x0 + kmPx} V${y0 - 5}"/><text x="${x0 + kmPx / 2}" y="${y0 - 8}" text-anchor="middle">${km / 1000} km</text>` +
+      `<path class="scale" d="M18,34 V14 M12,22 L18,12 L24,22"/><text x="18" y="48" text-anchor="middle">N</text><rect class="cell" id="heat-cell" width="0" height="0"/>`;
+    $("heat-legend").innerHTML = HEAT_BINS.map(([, label], k) => `<span><i style="background:${HEAT_RAMP[k]}"></i>${label}</span>`).join("") + "<span>runs</span>";
+  }
+  function heatCellAt(e) {
+    if (!hv) return null;
+    const c = $("lot-heat"), r = c.getBoundingClientRect();
+    const vc = Math.floor((e.clientX - r.left) / r.width * hv.cols), vr = Math.floor((e.clientY - r.top) / r.height * hv.rows);
+    return vc < 0 || vr < 0 || vc >= hv.cols || vr >= hv.rows ? null : { col: hv.c0 + vc, row: hv.r0 + vr, vc, vr, r };
+  }
+  function cellCentre(col, row) {
+    return [CITY.getNorth() - (row + 0.5) * (CITY.getNorth() - CITY.getSouth()) / HEAT_ROWS,
+            CITY.getWest() + (col + 0.5) * (CITY.getEast() - CITY.getWest()) / HEAT_COLS];
+  }
+  $("lot-heat-wrap").addEventListener("pointermove", e => {
+    const h = heatCellAt(e), mark = $("heat-cell");
+    const v = h && heat ? heat[h.row * HEAT_COLS + h.col] : 0;
+    if (!v) { mark.setAttribute("width", 0); hideTip(); return; }
+    const s = Math.max(6, hv.px + 4);  // the outline is drawn a little bigger than the cell, so it shows
+    mark.setAttribute("x", (h.vc + 0.5) * hv.px - s / 2); mark.setAttribute("y", (h.vr + 0.5) * hv.px - s / 2);
+    mark.setAttribute("width", s); mark.setAttribute("height", s);
+    const px = h.r.left + (h.vc + 1) * h.r.width / hv.cols, py = h.r.top + (h.vr + 1) * h.r.height / hv.rows;
+    showDataTip({ left: px + 6, right: px + 6, top: py - 4, bottom: py + 4 }, `${v} run${v === 1 ? "" : "s"}`,
+      `crossed this ${HEAT_CELL_M} m square. Click to zoom the map here.`);
+  });
+  $("lot-heat-wrap").addEventListener("pointerleave", () => { $("heat-cell").setAttribute("width", 0); hideTip(); });
+  $("lot-heat-wrap").addEventListener("click", e => {
+    const h = heatCellAt(e); if (!h || !heat || !heat[h.row * HEAT_COLS + h.col]) return;
+    hideTip();
+    map.setView(cellCentre(h.col, h.row), 15);
+    document.querySelector(".mapwrap").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  function refresh() { evaluate(); drawPins(); table(); drawDetail(); drawRun(); renderRunReport(); viewChrome(); renderLot(); }
 
   // ---------- the two views: chrome around the map and panel ----------
   const CAFE_LEGEND = () => STATUS.map((s, k) => `<span data-tip="status-${k}">${sym(k)}${esc(s.label)}</span>`).join("") +
@@ -1346,7 +1544,7 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
     if (state.years.has(y) && state.years.size > 1) state.years.delete(y); else state.years.add(y);
     $("years").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", state.years.has(+x.dataset.y)));
     if (state.lastRun >= 0 && !state.years.has(runYears[state.lastRun])) state.lastRun = -1;  // its year is hidden now
-    if (state.mode === "run" && !state.years.has(runYears[state.run])) { evaluate(); select(state.sel, true); return; }  // re-score, then back to the cafe view
+    if (state.mode === "run" && !state.years.has(runYears[state.run])) { evaluate(); renderLot(); select(state.sel, true); return; }  // re-score, then back to the cafe view
     glow._draw(); refresh();
   }));
   const setShow = mode => {
@@ -1371,6 +1569,7 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
   // ---------- start ----------
   M._ct_set_radius(state.R);
   evaluate();
+  renderLot();
   $("show-all").setAttribute("aria-pressed", state.show === "all"); $("show-both").setAttribute("aria-pressed", state.show === "both");
   const want = hash.get("cafe");
   const fromHash = want ? cafeOsm.findIndex(o => String(o) === want) : -1;

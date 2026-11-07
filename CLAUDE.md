@@ -49,6 +49,7 @@ A GD&T-style tolerance analysis of the owner's Garmin runs past Toronto cafes.
 - **Year filter:** a bitmask with bit (year − 2000).
 - **Checker's notes** (`Engine::notes`, `kNote*` constants): the C++ owns the rules, thresholds and numbers. The page's `NOTE_TEXT` owns only the wording, one sentence per kind.
 - **Run inspection** (`runs_at`, `run_report`, `run_profile`): same split. The C++ finds and scores one run across every cafe (folded like `parts_of`); the page draws it and words it.
+- **The lot** (`LotStats` filled by `evaluate`, `heat`): same split. The C++ sums the runs and counts distinct runs per heat cell; the page draws the tiles, the month chart and the density map. The heat ramp is purple, like the runs.
 
 ## Privacy
 - `data/`, `output/` and `docs/` are gitignored. **Never commit or publish them, `generated/` or `build/`.** The one exception is `data/README.md` (`data/*` + `!data/README.md`): notes on the data sources with no data in them. Keep it current when inputs change.

@@ -32,6 +32,8 @@ std::vector<double> g_hits;           // 2 per hit: run, distance
 std::vector<double> g_report;         // 9 per row: cafe, d, prof, pos, pro, along, street, q_lat, q_lon
 std::vector<double> g_profile;        // 2 per point: x along the street, offset
 int g_profile_street = -1;
+std::vector<double> g_lot;            // see ct_lot
+std::vector<int32_t> g_heat;          // cols x rows run counts
 
 void flatten(const std::vector<std::vector<ct::LatLon>>& polys, std::vector<int32_t>& start, std::vector<float>& xy) {
     start.assign(1, 0);
@@ -183,5 +185,21 @@ EMSCRIPTEN_KEEPALIVE int ct_run_profile(int cafe, int run) {
 }
 EMSCRIPTEN_KEEPALIVE const double* ct_run_profile_data() { return g_profile.data(); }  // 2 per point
 EMSCRIPTEN_KEEPALIVE int ct_run_profile_street() { return g_profile_street; }
+
+// ---- the lot ----
+// The lot as of the last ct_evaluate: [runs, km, median_km, longest_km, parts, accepted, median_cafes,
+// most_cafes, most_cafes_run, first_month (year * 12 + month - 1), n_months], then n_months run counts.
+EMSCRIPTEN_KEEPALIVE const double* ct_lot() {
+    const auto& l = g_engine.lot();
+    g_lot = {double(l.runs), l.km, l.median_km, l.longest_km, double(l.parts), double(l.accepted), l.median_cafes,
+             double(l.most_cafes), double(l.most_cafes_run), double(l.first_month), double(l.per_month.size())};
+    for (int32_t n : l.per_month) g_lot.push_back(n);
+    return g_lot.data();
+}
+// Distinct runs (year mask of the last ct_evaluate) per cell of a cols x rows grid over the box, row 0 north.
+EMSCRIPTEN_KEEPALIVE const int32_t* ct_heat(int cols, int rows, double s, double w, double n, double e) {
+    g_heat = g_engine.heat(cols, rows, {s, w}, {n, e}, g_settings.year_mask);
+    return g_heat.data();
+}
 
 }  // extern "C"
