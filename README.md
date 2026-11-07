@@ -44,6 +44,11 @@ roasters stay in.
   - each pass: green when the run is accepted, red when it isn't
   - the closest-approach dots
   - the Ø zone
+  - **GD&T annotations** (toggle):
+    - a datum-A symbol on the cafe
+    - a `⌖ | Ø50 | A` feature control frame on a leader to the position zone, with the actual best and median Ø and the run yield
+    - a dimension line to the best run's closest point
+    - for the top three streets, a band-width dimension and a `⌒ | 30 | A` frame with the street's p95 actual and pass yield
 
   The panel shows both feature control frames with actual values and yields, a per-street table with bias, and a histogram of Ø.
 - **Controls:**

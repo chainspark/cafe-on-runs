@@ -243,6 +243,7 @@ Strings are read with `UTF8ToString`.
 | `ct_detail_part_count`, `ct_detail_parts` | f64 × 5 per run: run, d, prof, ⌖ ok, ⌒ ok |
 | `ct_detail_feature_count`, `ct_detail_features` | f64 × 9 per street: name id, passes, ⌖, ⌒, both, p95, bias, nx, ny |
 | `ct_detail_line_*`, `ct_detail_band_*` | Polylines and polygons: i32 offsets (count + 1), then f32 [lat, lon] pairs |
+| `ct_detail_line_names()` | i32 street name id per nominal line / band, which ties the ⌒ annotations to a street |
 
 When adding a function, mark it `EMSCRIPTEN_KEEPALIVE`, add it to the export list in
 `build.sh`, and document its buffer layout here.
@@ -255,6 +256,13 @@ When adding a function, mark it `EMSCRIPTEN_KEEPALIVE`, add it to the export lis
   - The **glow layer**, a custom `L.Layer` drawing to its own canvas. It strokes every run part with `globalCompositeOperation = "lighter"`, so overlapping runs brighten the way the route heatmap does. It is redrawn on `moveend`/`zoomend` and when the year filter changes.
   - **Cafe pins:** canvas `circleMarker`s coloured by status. In "Conform to both" mode, the other pins are hidden.
   - **Selection overlay:** the R circle, the band polygons and nominals (dashed chain lines), the passes (green when the run is accepted, red otherwise), closest-approach dots and the Ø zone circle.
+  - **GD&T annotations** (toggle, on by default): an `annot` pane above the pins and labels, with `pointer-events: none` so it never blocks a click. It holds:
+    - a datum-A symbol on the cafe
+    - a `⌖` frame on a leader to the Ø zone, with the actual values
+    - a dimension to the best run's closest point
+    - for the top 3 streets, a band-width dimension and a `⌒` frame
+
+    The callouts are laid out in screen pixels and redrawn on every zoom. Frames sit in columns just outside the R circle, are stacked so they never overlap, and switch sides or slide inwards to stay on the map.
 - **What each control calls:**
 
 | Control | Engine calls |

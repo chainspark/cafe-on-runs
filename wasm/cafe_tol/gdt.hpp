@@ -55,6 +55,7 @@ struct Detail {
     std::vector<Part> parts;
     std::vector<Feature> features;
     std::vector<std::vector<LatLon>> nominals, bands;  // centreline inside R, and its ±band/2 polygon
+    std::vector<int32_t> nominal_names;                // street name id of each nominal / band
 };
 
 struct Settings {

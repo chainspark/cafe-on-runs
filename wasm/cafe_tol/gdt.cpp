@@ -252,6 +252,7 @@ Detail Engine::detail(int cafe, const Settings& s) const {
                 std::reverse(right.begin(), right.end());
                 left.insert(left.end(), right.begin(), right.end());
                 d.nominals.push_back(std::move(line));
+                d.nominal_names.push_back(net_.piece_name[piece]);
                 d.bands.push_back(std::move(left));
             }
             i = j + 1;

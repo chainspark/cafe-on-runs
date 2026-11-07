@@ -101,6 +101,20 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
 .leaflet-tooltip.cafe-tip { font: 600 11px var(--f-mono); background: #1c2026; color: #e6ebf0; border: 1px solid #3a424d; box-shadow: none }
 .leaflet-tooltip.cafe-tip::before { display: none }
 .leaflet-tooltip.cafe-tip.label { padding: 1px 5px; font-size: 10.5px; background: rgba(28,32,38,.82); border-color: transparent }
+/* GD&T annotations drawn on the map for the selected cafe (drawing-sheet style, light on the dark map) */
+.anno { pointer-events: none; font: 600 11px var(--f-mono); color: #18232e; white-space: nowrap }
+.anno .box { position: absolute; top: 0; left: 0; transform: translate(0, -50%); background: #f6f7f9; border: 1.5px solid #18232e; box-shadow: 0 2px 8px rgba(0,0,0,.5) }
+.anno.left .box { transform: translate(-100%, -50%) }
+.anno .fr { display: flex }
+.anno .fr > span { padding: 3px 7px; border-right: 1.5px solid #18232e; display: flex; align-items: center }
+.anno .fr > span:last-child { border-right: 0 }
+.anno svg { width: 12px; height: 12px; stroke: #18232e; fill: none; stroke-width: 1.8 }
+.anno .act { border-top: 1px solid #c7d0d9; padding: 2px 7px 3px; font-weight: 500; font-size: 10.5px; color: #3a4552 }
+.anno .act b { font-weight: 700 } .anno .ok { color: #19805a } .anno .bad { color: #b8432b }
+.anno .datum { padding: 2px 7px; font-size: 12px }
+.anno .dim { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); background: rgba(28,32,38,.88); color: #f6f7f9; padding: 0 4px; border-radius: 2px; font-size: 10.5px }
+.toggle { display: inline-flex; gap: 6px; align-items: center; font-size: 13px }
+.toggle input { accent-color: var(--accent); width: 15px; height: 15px }
 .about { border: 1.5px solid var(--ink); background: var(--sheet); padding: 18px 20px 20px; display: grid; gap: 18px; scroll-margin-top: 12px }
 .about h2 { font-family: var(--f-display); font-size: 26px; font-weight: 720; font-stretch: 82%; margin: 0 }
 .about h3 { font-size: 15px }
@@ -153,6 +167,7 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
           <button type="button" id="show-all" aria-pressed="true">All cafes</button>
           <button type="button" id="show-both" aria-pressed="false">Conform to both</button>
         </div>
+        <label class="toggle"><input type="checkbox" id="annot" checked> GD&amp;T annotations</label>
       </div>
       <div class="count" id="count"></div>
       <div class="row"><input id="search" type="search" placeholder="Find a cafe" aria-label="Find a cafe"></div>
@@ -180,6 +195,7 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
               <li><b>Blue dash-dot line:</b> the street centreline. The shaded strip around it is the profile band.</li>
               <li><b>Runs:</b> green when accepted, red when rejected. The dots mark each run's closest point.</li>
               <li><b>Red dashed circle:</b> the position zone.</li>
+              <li><b>White callouts</b> (toggle "GD&amp;T annotations"): the datum A, a ⌖ frame for the position zone, and a ⌒ frame plus band-width dimension for each main street, each with the actual values, the way a drawing is annotated.</li>
             </ul>
           </li>
         </ul>
@@ -315,7 +331,7 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
   const years = [...new Set(runYears)].sort();
   const hash = new URLSearchParams(location.hash.slice(1));
   const state = { R: 75, tol: 50, band: 30, acc: 75, years: new Set(years), show: hash.get("show") === "both" ? "both" : "all",
-    sel: -1, query: "", res: [] };
+    sel: -1, query: "", res: [], annot: true };
   const yearMask = () => [...state.years].reduce((m, y) => m | (1 << Math.max(0, Math.min(31, y - 2000))), 0) >>> 0;
 
   // ---------- map ----------
@@ -374,8 +390,18 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
     .bindTooltip(esc(cafeName[i]), { className: "cafe-tip", direction: "top", offset: [0, -6] })
     .on("click", () => select(i, false)));
   const overlay = L.layerGroup().addTo(map);
+  // GD&T annotations: their own pane above the pins, never catching the mouse; laid out in screen
+  // pixels, so they are redrawn on every zoom to keep a constant size.
+  map.createPane("annot").style.zIndex = 660;  // above pins (620) and cafe-name labels (tooltips, 650)
+  map.getPane("annot").style.pointerEvents = "none";
+  const annotRenderer = L.svg({ pane: "annot", padding: 0.5 });
+  const annot = L.layerGroup().addTo(map);
+  let lastDetail = null;
   let labelled = null;
-  map.on("zoomend", () => { const on = map.getZoom() >= LABEL_ZOOM; if (on !== labelled) { labelled = on; drawPins(); } });
+  map.on("zoomend", () => {
+    const on = map.getZoom() >= LABEL_ZOOM; if (on !== labelled) { labelled = on; drawPins(); }
+    drawAnnotations();
+  });
 
   // ---------- engine calls ----------
   function evaluate() {
@@ -400,7 +426,8 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
     };
     const lines = polys(M._ct_detail_line_count, M._ct_detail_line_start, M._ct_detail_lines);
     const bands = polys(M._ct_detail_band_count, M._ct_detail_band_start, M._ct_detail_bands);
-    return { passes, parts, feats, lines, bands };
+    const lineNames = lines.length ? Array.from(i32(M._ct_detail_line_names(), lines.length), streetName) : [];
+    return { passes, parts, feats, lines, bands, lineNames };
   }
 
   // ---------- rendering ----------
@@ -474,6 +501,8 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
       L.circleMarker(p.q, { radius: 2.5, stroke: false, fillColor: 2 * p.d <= state.tol ? css("--s-both") : css("--s-none"), fillOpacity: 1, interactive: false }).addTo(overlay);
     });
     L.circle(c, { radius: state.tol / 2, color: "#ff6a6a", weight: 1.6, dashArray: "6 4", fill: false, interactive: false }).addTo(overlay);
+    lastDetail = { i, r, d };
+    drawAnnotations();
 
     const n = d.parts.length, posN = d.parts.filter(p => p.pos).length, proN = d.parts.filter(p => p.pro).length, bothN = d.parts.filter(p => p.pos && p.pro).length;
     const prof = d.parts.map(p => p.prof).sort((a, b) => a - b), p95 = n ? prof[Math.min(n - 1, Math.round(.95 * (n - 1)))] : 0;
@@ -488,6 +517,103 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
            d.feats.map(f => `<tr><td>${esc(f.name)}</td><td class="num">${f.passes}</td><td class="num">${f.pos}</td><td class="num">${f.pro}</td><td class="num">${f.both}</td><td class="num">${f.p95.toFixed(1)}</td><td class="num">${side(f)}</td></tr>`).join("") +
            `</tbody></table></div>` + histogram(d.parts)
          : `<p class="muted">No run passes within R = ${state.R} m of this cafe in the selected years.</p>`);
+  }
+
+  // ---------- GD&T annotations on the map ----------
+  const toPt = ll => map.latLngToLayerPoint(ll), toLL = p => map.layerPointToLatLng(p);
+  const pxPerMetre = ll => {
+    const a = toPt(ll), b = toPt([ll[0], ll[1] + 100 / (111320 * Math.cos(ll[0] * Math.PI / 180))]);
+    return (b.x - a.x) / 100;
+  };
+  const annLine = (pts, o = {}) => L.polyline(pts.map(toLL), Object.assign({ renderer: annotRenderer, color: "#f6f7f9",
+    weight: 1.2, opacity: .95, interactive: false }, o)).addTo(annot);
+  const annHtml = (p, html, cls = "") => L.marker(toLL(p), { pane: "annot", interactive: false, keyboard: false,
+    icon: L.divIcon({ className: "anno " + cls, html, iconSize: [0, 0] }) }).addTo(annot);
+  const annFrame = (p, sym, tol, act, left) => annHtml(p,
+    `<div class="box"><div class="fr"><span>${sym}</span><span>${esc(tol)}</span><span>A</span></div><div class="act">${act}</div></div>`, left ? "left" : "");
+  const yieldTxt = (k, n) => { const y = n ? k / n : 0; return `<b class="${y >= state.acc / 100 - 1e-9 ? "ok" : "bad"}">${k}/${n} runs · ${pct(y)}</b>`; };
+  // Callouts are laid out like a drawing: frames sit in two columns just outside the R circle (left
+  // and right of the cafe), each at the height of the feature it points to, stacked so they don't
+  // overlap, and a frame switches columns rather than run off the map.
+  const FRAME_GAP = 46, SHOULDER = 17;
+  const plain = html => html.replace(/<[^>]*>/g, "").replace(/&amp;/g, "&").replace(/&[a-z]+;/g, "x");
+  function layoutCallouts(C, ringR, callouts) {
+    const size = map.getSize(), cc = map.layerPointToContainerPoint(C);
+    const roomL = cc.x - ringR - SHOULDER - 8, roomR = size.x - (cc.x + ringR) - SHOULDER - 8;
+    callouts.forEach(o => {
+      const v = o.from.subtract(C), l = Math.hypot(v.x, v.y);
+      const ux = l > 1 ? v.x / l : o.ux, uy = l > 1 ? v.y / l : o.uy;
+      const w = 20 + 6.6 * plain(o.act).length;  // estimated frame width (mono 10.5 px)
+      o.left = ux < 0;
+      if ((o.left ? roomL : roomR) < w) o.left = roomL >= w ? true : roomR >= w ? false : roomL > roomR;
+      // the column sits just outside the R circle; slide it inwards if the frame would leave the map
+      const shift = Math.max(0, w - (o.left ? roomL : roomR));
+      const x = C.x + (o.left ? -(ringR - shift) : ringR - shift);
+      const y = Math.min(Math.max(C.y + uy * ringR * 0.8, C.y - cc.y + 24), C.y - cc.y + size.y - 40);
+      o.ring = L.point(x, y);
+    });
+    [true, false].forEach(side => {  // stack each side top to bottom
+      const col = callouts.filter(o => o.left === side).sort((a, b) => a.ring.y - b.ring.y);
+      for (let k = 1; k < col.length; k++)
+        if (col[k].ring.y - col[k - 1].ring.y < FRAME_GAP) col[k].ring = L.point(col[k].ring.x, col[k - 1].ring.y + FRAME_GAP);
+    });
+    callouts.forEach(o => {
+      const end = o.ring.add(L.point(o.left ? -14 : 14, 0));
+      annLine([o.from, o.ring, end]);
+      L.circleMarker(toLL(o.from), { renderer: annotRenderer, radius: 2.5, stroke: false, fillColor: "#f6f7f9", fillOpacity: 1,
+        interactive: false }).addTo(annot);  // dot where the leader touches the feature
+      annFrame(end.add(L.point(o.left ? -3 : 3, 0)), o.sym, o.tol, o.act, o.left);
+    });
+  }
+
+  function drawAnnotations() {
+    annot.clearLayers();
+    if (!state.annot || state.sel < 0 || !lastDetail || lastDetail.i !== state.sel) return;
+    const { i, r, d } = lastDetail;
+    const c = lls[i], C = toPt(c), ppm = pxPerMetre(c);
+    if (!d.parts.length) return;
+
+    // datum A: feature symbol on the cafe
+    const dA = C.add(L.point(-26, 26));
+    annLine([C, dA]);
+    annHtml(dA.add(L.point(-2, 0)), `<div class="box"><div class="datum">A</div></div>`, "left");
+
+    // ⌖ true position: frame on a leader from the Ø zone, actual = the run Ø values
+    const callouts = [];
+    const rz = Math.max(6, state.tol / 2 * ppm), ang = -Math.PI / 4;
+    const posN = d.parts.filter(p => p.pos).length;
+    callouts.push({ from: C.add(L.point(Math.cos(ang) * rz, Math.sin(ang) * rz)), ux: Math.SQRT1_2, uy: -Math.SQRT1_2,
+      sym: SYM_POS, tol: "Ø" + state.tol,
+      act: `best Ø${r.best.toFixed(0)} · median Ø${r.med.toFixed(0)} · ${yieldTxt(posN, d.parts.length)}` });
+    // dimension: the best run's closest approach, Ø = 2d
+    const best = d.passes.reduce((m, p) => (!m || p.d < m.d ? p : m), null);
+    if (best) {
+      const Q = toPt(best.q);
+      if (C.distanceTo(Q) > 10) {
+        annLine([C, Q], { dashArray: "3 3" });
+        annHtml(C.add(Q).divideBy(2), `<div class="dim">Ø${(2 * best.d).toFixed(0)}</div>`);
+      }
+    }
+
+    // ⌒ profile of a line: per street (most passes first, up to 3), a band-width dimension and a frame
+    d.feats.slice(0, 3).forEach(f => {
+      const cand = d.lines.map((l, k) => ({ l, k })).filter(o => d.lineNames[o.k] === f.name && o.l.length >= 3);
+      if (!cand.length) return;
+      const line = cand.reduce((a, b) => (b.l.length > a.l.length ? b : a)).l.map(toPt);
+      let k = 1, far = -1;  // the point farthest from the cafe (clear of the other annotations)
+      for (let j = 1; j < line.length - 1; j++) { const dd = line[j].distanceTo(C); if (dd > far) { far = dd; k = j; } }
+      const P = line[k], t = line[k + 1].subtract(line[k - 1]), tl = Math.hypot(t.x, t.y) || 1;
+      const tx = t.x / tl, ty = t.y / tl;
+      let nx = -ty, ny = tx;
+      if ((P.x - C.x) * nx + (P.y - C.y) * ny < 0) { nx = -nx; ny = -ny; }  // put the callout on the side away from the cafe
+      const half = state.band / 2 * ppm, a = P.subtract(L.point(nx * half, ny * half)), b = P.add(L.point(nx * half, ny * half));
+      annLine([a, b]);
+      [a, b].forEach(e => annLine([e.subtract(L.point(tx * 6, ty * 6)), e.add(L.point(tx * 6, ty * 6))], { weight: 1.6 }));
+      const ok = f.pro / f.passes >= state.acc / 100 - 1e-9;
+      callouts.push({ from: b, ux: nx, uy: ny, sym: SYM_PROF, tol: String(state.band),
+        act: `${esc(f.name)} · p95 ${f.p95.toFixed(1)} · <b class="${ok ? "ok" : "bad"}">${f.pro}/${f.passes}</b> passes` });
+    });
+    layoutCallouts(C, state.R * ppm + 30, callouts);
   }
 
   function select(i, pan) {
@@ -525,6 +651,7 @@ footer { border-top: 2px solid var(--ink); padding-top: 10px; font: 12px var(--f
   $("show-all").addEventListener("click", () => setShow("all"));
   $("show-both").addEventListener("click", () => setShow("both"));
   $("search").addEventListener("input", e => { state.query = e.target.value; table(); });
+  $("annot").addEventListener("change", e => { state.annot = e.target.checked; drawAnnotations(); });
   $("legend").innerHTML = STATUS.map(s => `<span><i style="background:var(${s.color})"></i>${esc(s.label)}</span>`).join("");
 
   // ---------- start ----------

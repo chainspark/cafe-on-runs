@@ -23,6 +23,7 @@ std::vector<double> g_run_ids, g_cafe_ll, g_cafe_osm, g_results;
 std::vector<double> g_passes, g_parts, g_features;
 std::vector<int32_t> g_line_start, g_band_start;
 std::vector<float> g_lines, g_bands;
+std::vector<int32_t> g_line_names;
 
 void flatten(const std::vector<std::vector<ct::LatLon>>& polys, std::vector<int32_t>& start, std::vector<float>& xy) {
     start.assign(1, 0);
@@ -105,6 +106,7 @@ EMSCRIPTEN_KEEPALIVE int ct_detail(int cafe) {
     }
     flatten(d.nominals, g_line_start, g_lines);
     flatten(d.bands, g_band_start, g_bands);
+    g_line_names = d.nominal_names;
     return int(d.passes.size());
 }
 EMSCRIPTEN_KEEPALIVE const double* ct_detail_passes() { return g_passes.data(); }  // 9 per pass
@@ -118,5 +120,6 @@ EMSCRIPTEN_KEEPALIVE const float* ct_detail_lines() { return g_lines.data(); }
 EMSCRIPTEN_KEEPALIVE int ct_detail_band_count() { return int(g_band_start.size()) - 1; }
 EMSCRIPTEN_KEEPALIVE const int32_t* ct_detail_band_start() { return g_band_start.data(); }
 EMSCRIPTEN_KEEPALIVE const float* ct_detail_bands() { return g_bands.data(); }
+EMSCRIPTEN_KEEPALIVE const int32_t* ct_detail_line_names() { return g_line_names.data(); }  // street name id per line/band
 
 }  // extern "C"

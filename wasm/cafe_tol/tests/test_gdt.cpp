@@ -124,6 +124,9 @@ static void test_sidewalks() {
     const Detail d = e.detail(0, settings());
     CHECK(d.features.size() == 1, "one street feature");
     NEAR(d.features[0].bias, 0, 0.3, "opposite sidewalks average to no bias");
+    bool named = !d.nominals.empty() && d.nominal_names.size() == d.nominals.size() && d.bands.size() == d.nominals.size();
+    for (int32_t n : d.nominal_names) named = named && e.network().names[n] == "Main St";
+    CHECK(named, "each nominal line and band carries its street name");
     NEAR(ps[0].mean_off * ps[1].mean_off, -64, 3, "offsets have opposite signs");
 }
 
