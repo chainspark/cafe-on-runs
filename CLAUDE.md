@@ -53,7 +53,7 @@ A GD&T-style tolerance analysis of the owner's Garmin runs past Toronto cafes.
 ## Privacy
 - `data/`, `output/` and `docs/` are gitignored. **Never commit or publish them, `generated/` or `build/`.** The one exception is `data/README.md` (`data/*` + `!data/README.md`): notes on the data sources with no data in them. Keep it current when inputs change.
 - **Provenance meta** (`cafes._meta`, shown under About → Data sources) must never hold coordinates, or any `activities.json` field except dates. Public meta reports no near-run counts. The page's About prose names no Toronto place but Toronto, because the forbidden-name scan matches substrings.
-- **The public page lives in `docs/index.html`,** built by `publish`. Updates are **manual**: the owner reviews and commits. Don't automate it.
+- **The public page is built into `docs/index.html` by `publish`** and served by GitHub Pages from the orphan `gh-pages` branch (only `index.html` and `.nojekyll`; never on `main`). The live page is https://chainspark.github.io/cafe-on-runs/ (the repo is `chainspark/cafe-on-runs`). Updates are **manual**: the owner reviews, then copies the page to `gh-pages` and pushes. Don't automate it.
 - **`privacy.check`:**
   - scans the page text **and decodes every base64 wasm module**
   - rebuilds the module's memory image from the data section, finds `CAFETOL1` with a version 1 or 2 header, and decodes it

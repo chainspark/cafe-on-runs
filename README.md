@@ -2,6 +2,8 @@
 
 **GD&T tolerance analysis of GPS runs, with a C++ geometry engine compiled to WebAssembly.**
 
+Live page: https://chainspark.github.io/cafe-on-runs/
+
 How closely do my runs pass Toronto's cafes, specified the way a drawing would? Think of each run
 as one part from the same process. The design intent never changes: follow the street past the
 cafe. Yet every run comes out a little different, because of GPS noise, the sidewalk I took, a road
@@ -186,6 +188,12 @@ The URL hash `#cafe=<osm id>&show=both` opens the page on one cafe, with only th
   - coordinate-like metadata
   - a wasm module without a readable dataset
 
-`data/`, `output/`, `docs/`, `wasm/cafe_tol/generated/` and `wasm/cafe_tol/build/` hold GPS data. They are gitignored and never committed. Publishing is manual: run `publish`, review `docs/`, then commit it yourself.
+`data/`, `output/`, `docs/`, `wasm/cafe_tol/generated/` and `wasm/cafe_tol/build/` hold GPS data. They are gitignored and never committed. Publishing is manual:
+
+1. Run `publish`, then review `docs/index.html`.
+2. Copy `docs/index.html` and `docs/.nojekyll` onto the `gh-pages` branch, which holds nothing else, then commit and push it.
+3. GitHub Pages serves that branch (Settings → Pages → Deploy from a branch → `gh-pages` / root).
+
+The built page never goes on `main`.
 
 Attribution and licences: see [Data sources](#data-sources) above and [data/README.md](data/README.md).
