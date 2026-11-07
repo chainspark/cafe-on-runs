@@ -1346,7 +1346,7 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
     if (state.years.has(y) && state.years.size > 1) state.years.delete(y); else state.years.add(y);
     $("years").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", state.years.has(+x.dataset.y)));
     if (state.lastRun >= 0 && !state.years.has(runYears[state.lastRun])) state.lastRun = -1;  // its year is hidden now
-    if (state.mode === "run" && !state.years.has(runYears[state.run])) { select(state.sel, true); return; }
+    if (state.mode === "run" && !state.years.has(runYears[state.run])) { evaluate(); select(state.sel, true); return; }  // re-score, then back to the cafe view
     glow._draw(); refresh();
   }));
   const setShow = mode => {
