@@ -1,6 +1,6 @@
 # Architecture
 
-Cafe Tolerance builds one self-contained HTML page. The page inspects the owner's runs past
+Cafe on Runs builds one self-contained HTML page. The page inspects the owner's runs past
 Toronto cafes using two GD&T callouts: **true position** ⌖ and **profile of a line** ⌒.
 
 - **Python** gathers and scrubs the data, then packs it into a compact binary dataset.

@@ -16,7 +16,7 @@ def main() -> None:
     pr = sub.add_parser("parse", help="decode FIT files into data/tracks.parquet")
     pr.set_defaults(func=lambda a: __import__("cafe_tolerance.parse", fromlist=["parse"]).parse())
 
-    c = sub.add_parser("cafes", help="build the cafe tolerance page (private by default)")
+    c = sub.add_parser("cafes", help="build the Cafe on Runs page (private by default)")
     c.add_argument("--public", action="store_true", help="privacy-scrubbed build (as published)")
     c.add_argument("--out", type=Path, help="output folder (default output/)")
     c.add_argument("--trim-meters", type=float, default=500, help="public build: hide the first/last N metres")

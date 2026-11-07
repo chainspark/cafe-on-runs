@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Cafe Tolerance</title>
+<title>Cafe on Runs</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&family=Barlow:wght@400;500;600&family=B612+Mono:wght@400;700&family=Caveat:wght@600;700&display=swap">
 <style>
@@ -267,8 +267,9 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
   <header>
     <div class="intro">
       <span class="eyebrow">GD&amp;T tolerance analysis of GPS runs · C++ geometry engine in WebAssembly</span>
-      <h1>Cafe Tolerance</h1>
-      <p class="muted">How closely do my runs pass Toronto's cafes, specified the way a drawing would? Think of each run as one part from the same process. The design intent never changes: follow the street past the cafe. Yet every run comes out a little different, because of GPS noise, the sidewalk I took, a road crossing or a detour, and tolerances decide how much of that variation is acceptable. The City street centreline is the nominal, and each cafe is datum A. A run is <b>accepted</b> when it meets both callouts: ⌖ true position (its closest approach to the cafe, Ø = 2d) and ⌒ profile of a line (its worst sideways deviation from the street). A cafe <b>conforms to both</b> when its share of accepted runs reaches the acceptance yield, like a batch passing inspection. Every check runs in your browser, in a C++ geometry engine compiled to WebAssembly, and is redone as you move the tolerances.</p>
+      <h1>Cafe on Runs</h1>
+      <p class="muted">How closely do my runs pass Toronto's cafes? Let's think of each running activity captured using Garmin smartwatch GPS as one manufactured part. The intent never changes: follow the street past the cafe. Yet every run comes out a little different, because of GPS noise, the sidewalk I took, a road crossing or a detour, and tolerances decide how much of that variation is acceptable.</p>
+      <p class="muted">The City street centreline is the nominal, and each cafe is datum A. A run is <b>accepted</b> when it meets both callouts: ⌖ true position (its closest approach to the cafe, Ø = 2d) and ⌒ profile of a line (its worst sideways deviation from the street). A cafe <b>conforms to both</b> when its share of accepted runs reaches the acceptance yield, like a batch passing inspection. Every check runs in your browser, in a C++ geometry engine compiled to WebAssembly, and is redone as you move the tolerances.</p>
       <p><a href="#about" id="about-link">About this project and its data sources ↓</a></p>
     </div>
     <div class="tblock" aria-label="Title block">

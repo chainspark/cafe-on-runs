@@ -1,12 +1,12 @@
-# Cafe Tolerance
+# Cafe on Runs
 
 **GD&T tolerance analysis of GPS runs, with a C++ geometry engine compiled to WebAssembly.**
 
 Live page: https://chainspark.github.io/cafe-on-runs/
 
-How closely do my runs pass Toronto's cafes, specified the way a drawing would? Think of each run
-as one part from the same process. The design intent never changes: follow the street past the
-cafe. Yet every run comes out a little different, because of GPS noise, the sidewalk I took, a road
+How closely do my runs pass Toronto's cafes? Let's think of each running activity captured using
+Garmin smartwatch GPS as one manufactured part. The intent never changes: follow the street past
+the cafe. Yet every run comes out a little different, because of GPS noise, the sidewalk I took, a road
 crossing or a detour, and tolerances decide how much of that variation is acceptable.
 - **The nominal:** the City street centreline.
 - **Datum A:** each cafe.
