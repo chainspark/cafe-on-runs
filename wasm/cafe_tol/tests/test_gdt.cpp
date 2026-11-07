@@ -321,6 +321,58 @@ static void test_notes_engine() {
           "detail without geometry has the same parts and features, and no drawing");
 }
 
+// ---- inspecting one run ----
+static void test_runs_at() {
+    Dataset ds;
+    ds.streets.push_back(street("Main St", -400, 0, 400, 0));
+    ds.runs.push_back(run(line(-300, 0, 300, 0), 2025));    // run 0 on the centreline
+    ds.runs.push_back(run(line(-300, 40, 300, 40), 2024));  // run 1, 40 m north
+    ds.cafes.push_back(cafe(0, 20));
+    Engine e = engine(ds);
+    auto hits = e.runs_at({0, 15}, 30, 0xffffffffu);
+    CHECK(hits.size() == 2 && hits[0].run == 0 && hits[1].run == 1, "both runs within 30 m, nearest first");
+    NEAR(hits.empty() ? 0 : hits[0].d, 15, 0.01, "... at their true distance");
+    CHECK(e.runs_at({0, 15}, 10, 0xffffffffu).empty(), "nothing within 10 m");
+    hits = e.runs_at({2.5, 0.5}, 1, 0xffffffffu);  // between two GPS points 5 m apart
+    CHECK(hits.size() == 1 && hits[0].run == 0, "a click between two points still hits the run (segment test)");
+    hits = e.runs_at({0, 15}, 30, 1u << (2025 - 2000));
+    CHECK(hits.size() == 1 && hits[0].run == 0, "the year mask hides runs from other years");
+}
+
+static void test_run_report() {
+    // one run along Main St at +4 m passes two cafes 300 m apart, and a third cafe it never reaches
+    Dataset ds;
+    ds.streets.push_back(street("Main St", -400, 0, 400, 0));
+    auto pts = line(-300, 4, 300, 4);
+    pts[pts.size() / 2 + 34] = ll(170, 24);  // one stray, 20 m off the line, just past the second cafe
+    ds.runs.push_back(run(pts));
+    ds.cafes.push_back(cafe(150, 10));   // passed second
+    ds.cafes.push_back(cafe(-150, 10));  // passed first
+    ds.cafes.push_back(cafe(0, 300));    // out of reach
+    Engine e = engine(ds);
+    const Settings s = settings();
+    e.evaluate(s);
+    const auto rows = e.run_report(0, s);
+    CHECK(rows.size() == 2, "the report lists the two cafes within R, not the third");
+    CHECK(rows.size() == 2 && rows[0].cafe == 1 && rows[1].cafe == 0, "... in the order the run passed them");
+    NEAR(rows.size() == 2 ? rows[0].along : 0, 150, 1.0, "the first is 150 m into the run");
+    NEAR(rows.size() == 2 ? rows[1].along : 0, 450, 1.0, "the second is 450 m into the run");
+    NEAR(rows.empty() ? 0 : rows[0].part.d, 6, 0.01, "closest approach 6 m");
+    CHECK(rows.size() == 2 && rows[0].part.pos && rows[0].part.pro, "the first cafe accepts the run");
+    CHECK(rows.size() == 2 && rows[1].part.pos && !rows[1].part.pro, "the stray fails ⌒ at the second cafe");
+    CHECK(rows.size() == 2 && e.network().names[rows[0].street] == "Main St", "rows carry the street of the closest pass");
+    NEAR(e.run_length(0), 600 + 2 * std::hypot(5.0, 20.0) - 10, 1.0, "run length follows the track, stray included");
+
+    const RunProfile pr = e.run_profile(0, 0);
+    double max_off = 0, x0 = 0, x1 = 0;
+    for (const auto& q : pr.pts) max_off = std::max(max_off, std::fabs(q.off));
+    if (!pr.pts.empty()) { x0 = pr.pts.front().x; x1 = pr.pts.back().x; }
+    CHECK(!pr.pts.empty() && e.network().names[pr.street] == "Main St", "a profile of the pass on Main St");
+    NEAR(2 * max_off, pr.prof, 1e-6, "the profile's largest offset is half the ⌒ actual");
+    CHECK(x0 < 0 && x1 > 0, "x runs west to east through the cafe (+ east on an E-W street)");
+    CHECK(e.run_profile(2, 0).pts.empty(), "no profile at a cafe the run never reached");
+}
+
 static void put_u32(std::vector<uint8_t>& b, size_t at, uint32_t v) {
     for (int k = 0; k < 4; ++k) b[at + k] = uint8_t(v >> (8 * k));
 }
@@ -362,6 +414,8 @@ int main() {
     test_combined_yield();
     test_notes_rules();
     test_notes_engine();
+    test_runs_at();
+    test_run_report();
     std::printf("%d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }

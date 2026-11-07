@@ -24,7 +24,8 @@ _ct_part_count,_ct_part_start,_ct_part_run,_ct_cafe_count,_ct_cafe_latlon,_ct_ca
 _ct_street_name,_ct_set_radius,_ct_evaluate,_ct_detail,_ct_detail_passes,_ct_detail_part_count,_ct_detail_parts,\
 _ct_detail_feature_count,_ct_detail_features,_ct_detail_line_count,_ct_detail_line_start,_ct_detail_lines,\
 _ct_detail_band_count,_ct_detail_band_start,_ct_detail_bands,_ct_detail_line_names,_ct_notes,_ct_notes_data,\
-_ct_note_counts"
+_ct_note_counts,_ct_run_dates,_ct_run_lengths,_ct_runs_at,_ct_runs_at_data,_ct_run_report,_ct_run_report_data,\
+_ct_run_profile,_ct_run_profile_data,_ct_run_profile_street"
     em++ $FLAGS $SRC api.cpp embedded.cpp "-DCT_DATASET_INC=\"$inc\"" \
       -sMODULARIZE=1 -sEXPORT_NAME=CafeTol -sSINGLE_FILE=1 -sENVIRONMENT=web \
       -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB \

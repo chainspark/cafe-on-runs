@@ -176,6 +176,9 @@ def _embedded_points(text: str, label: str, problems: list[str]) -> tuple[np.nda
         if not found:
             problems.append(f"{label}: embedded wasm #{n_mod} has no recognisable dataset - can't verify it")
         for ds in found:
+            exact = sum(1 for r in ds.runs if r.day)
+            if exact:  # published pages keep only the month and year of a run
+                problems.append(f"{label}: embedded wasm #{n_mod} holds {exact} exact run dates (day of the month)")
             pts.append(ds.all_points())
             names += ds.names()
             if ds.meta:

@@ -64,6 +64,42 @@ header .intro { display: grid; gap: 8px; min-width: 0 }
 .legend .pen { font-size: 18px; font-weight: 700; line-height: 1 }
 .mark { font-size: 17px; font-weight: 700; margin-right: 5px; line-height: 1; display: inline-block; text-decoration: none }
 .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
+[hidden] { display: none !important }
+/* run inspection: panel tabs, the run report, the map picker and the highlighted run */
+.tabs { display: flex; border: 1.5px solid var(--frame) }
+.tabs button { flex: 1; padding: 8px; border: 0; cursor: pointer; font: 600 14px var(--f-display); letter-spacing: .08em; text-transform: uppercase; background: var(--sheet); color: var(--ink) }
+.tabs button + button { border-left: 1.5px solid var(--frame) }
+.tabs button[aria-selected="true"] { background: var(--ink); color: var(--sheet) }
+.tabpane { display: grid; gap: 14px; min-width: 0 }
+.stack-s { display: grid; gap: 6px; min-width: 0 }
+.rr-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px }
+.rr-head h3 { font-size: 24px }
+.rr-nav { display: flex; gap: 6px; flex: none }
+.rr-nav button { width: 34px; height: 34px; border: 1.5px solid var(--frame); background: var(--field); color: var(--ink); cursor: pointer }
+.rr-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1.5px solid var(--frame) }
+.rr-stats div { padding: 7px 10px } .rr-stats div + div { border-left: 1px solid #3a434e }
+.rr-stats b { display: block; font: 700 18px var(--f-mono) }
+/* marks sit on the line; marks too close to fit side by side move to a lane above or below */
+.rr-strip { position: relative; height: 86px; margin: 0 12px }
+.rr-strip .line { position: absolute; left: 0; right: 0; top: 34px; height: 2px; background: var(--frame) }
+.rr-strip .end { position: absolute; top: 28px; width: 2px; height: 14px; background: var(--frame) }
+.rr-strip .km { position: absolute; top: 70px; font: 11px var(--f-mono); color: var(--muted) }
+.rr-strip button { position: absolute; transform: translateX(-50%); width: 22px; height: 22px; border-radius: 50%; border: 2px solid; padding: 0; cursor: pointer; font: 700 10.5px var(--f-mono) }
+tr.clickable { cursor: pointer } tr.clickable:hover td { background: color-mix(in srgb, var(--accent) 10%, transparent) }
+.runs-table { max-height: 300px }
+.yes { color: var(--ok) } .no { color: var(--bad) }
+.rr-profile { display: block; width: 100%; height: auto; background: var(--field); border: 1px solid #3a434e; font: 10px var(--f-mono) }
+.run-picker .leaflet-popup-content-wrapper { background: #1b2129; color: var(--ink); border: 1.5px solid var(--frame); border-radius: 0; box-shadow: 0 8px 22px rgba(0,0,0,.6) }
+.run-picker .leaflet-popup-tip { background: #1b2129 }
+.run-picker .leaflet-popup-content { margin: 0; width: 262px !important; font: 13px var(--f-body) }
+.run-picker a.leaflet-popup-close-button { color: var(--muted) }
+.run-picker .pk-title { padding: 8px 10px; border-bottom: 1px solid #3a434e; font: 600 13px var(--f-display); letter-spacing: .08em; text-transform: uppercase }
+.run-picker .pk-list { max-height: 260px; overflow-y: auto }
+.run-picker button { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; width: 100%; text-align: left; padding: 6px 10px; border: 0; border-bottom: 1px solid var(--rule); background: transparent; color: var(--ink); cursor: pointer; font: 13px var(--f-body) }
+.run-picker button:hover, .run-picker button:focus-visible { background: color-mix(in srgb, var(--accent) 14%, transparent) }
+.run-picker .sub { font-size: 12px; color: var(--muted) } .run-picker .r { font: 11.5px var(--f-mono); color: var(--muted); text-align: right }
+.run-arrow { width: 0; height: 0; border-left: 9px solid #f6f7f9; border-top: 5px solid transparent; border-bottom: 5px solid transparent; transform-origin: 50% 50% }
+.run-dia { font: 600 10px var(--f-mono); padding: 0 4px; background: rgba(28,32,38,.9); border: 1px solid; white-space: nowrap; transform: translate(-50%, -150%); display: inline-block }
 .notes { border-left: 2px solid var(--note); padding: 2px 0 2px 12px; display: grid; gap: 1px }
 .notes .eyebrow { color: var(--note) }
 .notes .pen { font-size: 21px; font-weight: 600; line-height: 1.2 }
@@ -216,10 +252,19 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
         </div>
         <label class="toggle" data-tip="annot"><input type="checkbox" id="annot" checked> GD&amp;T annotations</label>
       </div>
-      <div class="count" id="count" data-tip="count"></div>
-      <div class="row"><input id="search" data-tip="search" type="search" placeholder="Find a cafe" aria-label="Find a cafe"></div>
-      <div class="tablewrap tall"><table id="cafes"></table></div>
-      <div class="status-line" id="status-line"></div>
+      <div class="tabs" role="tablist" aria-label="Panel">
+        <button type="button" role="tab" id="tab-cafes-btn" aria-selected="true" aria-controls="tab-cafes">Cafes</button>
+        <button type="button" role="tab" id="tab-run-btn" aria-selected="false" aria-controls="tab-run">Run report</button>
+      </div>
+      <div class="tabpane" id="tab-cafes" role="tabpanel" aria-labelledby="tab-cafes-btn">
+        <div class="count" id="count" data-tip="count"></div>
+        <div class="row"><input id="search" data-tip="search" type="search" placeholder="Find a cafe" aria-label="Find a cafe"></div>
+        <div class="tablewrap tall"><table id="cafes"></table></div>
+        <div class="status-line" id="status-line"></div>
+      </div>
+      <div class="tabpane" id="tab-run" role="tabpanel" aria-labelledby="tab-run-btn" hidden>
+        <div id="run-report"></div>
+      </div>
     </div>
   </div>
 
@@ -243,6 +288,7 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
               <li><b>Runs:</b> green when accepted, red when rejected. The dots mark each run's closest point.</li>
               <li><b>Red dashed circle:</b> the position zone.</li>
               <li><b>White callouts</b> (toggle "GD&amp;T annotations"): the datum A, a ⌖ frame for the position zone, and a ⌒ frame plus band-width dimension for each main street, each with the actual values, the way a drawing is annotated.</li>
+              <li><b>Click a run</b> anywhere on the map to inspect it (where runs overlap, a list lets you pick one). It is drawn in white with arrows for its direction, and the Run report tab lists every cafe it passed, in order, with its verdict at each. A row under "Runs at this cafe" opens it too.</li>
               <li><b>Yellow handwriting:</b> checker's notes, written only when a cafe's runs show something worth pointing out. A yellow ① in the table marks those cafes.</li>
             </ul>
           </li>
@@ -357,6 +403,9 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
     "st-both": ["Both", "Passes meeting both callouts."],
     "st-p95": ["⌒ p95", "95th-percentile profile actual on this street, in metres: 95% of passes stay within this band width."],
     "st-bias": ["Bias", "Average sideways offset from the centreline. N/S for east-west streets, W/E for north-south ones. A sidewalk run sits a few metres off by design."],
+    "runs-table": ["Runs at this cafe", "One row per run (part) that came within R: its Ø (twice the closest approach), its ⌒ actual (twice its largest offset), the two verdicts and the result. Click a row to inspect that run."],
+    "run-strip": ["Route strip", "The run as one line from start to finish. Each mark is a cafe, placed where along the run it was passed: filled = accepted, hollow = rejected. Click one to select that cafe."],
+    "run-profile": ["This run at the cafe", "The run's sideways offset from the centreline along the street inside R, against the profile band. Its ⌒ actual is twice the largest offset."],
     "hist": ["Ø of each run", "Distribution of the runs' closest approach as a diameter. Green bars are inside the position zone (dashed red line), red bars are outside."],
     "status-0": ["Conforms to both", "At least the acceptance yield of runs meet both callouts at once."],
     "status-1": ["⌖ only", "Enough runs come close enough, but too many stray from the street."],
@@ -544,12 +593,19 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
   const cafeOsm = Array.from(f64(M._ct_cafe_osm(), nCafes));
   const cafeName = Array.from({ length: nCafes }, (_, i) => M.UTF8ToString(M._ct_cafe_name(i)));
   const streetName = i => M.UTF8ToString(M._ct_street_name(i));
+  // runs as parts: dates (yyyymmdd; a public build stores day 00, so only month and year can show) and lengths
+  const runDates = Array.from(i32(M._ct_run_dates(), nRuns));
+  const runLen = Array.from(f64(M._ct_run_lengths(), nRuns));
+  const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const runDate = r => { const v = runDates[r], d = v % 100, m = Math.floor(v / 100) % 100, y = Math.floor(v / 10000);
+    return (d ? d + " " : "") + MON[Math.max(0, m - 1)] + " " + y; };
+  const km = m => (m / 1000).toFixed(m < 10000 ? 2 : 1) + " km";
 
   // ---------- state ----------
   const years = [...new Set(runYears)].sort();
   const hash = new URLSearchParams(location.hash.slice(1));
   const state = { R: 75, tol: 50, band: 30, acc: 75, years: new Set(years), show: hash.get("show") === "both" ? "both" : "all",
-    sel: -1, query: "", res: [], annot: true };
+    sel: -1, query: "", res: [], annot: true, run: -1, hover: -1 };
   const yearMask = () => [...state.years].reduce((m, y) => m | (1 << Math.max(0, Math.min(31, y - 2000))), 0) >>> 0;
 
   // ---------- map ----------
@@ -584,7 +640,8 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.globalCompositeOperation = "lighter";
       const z = m.getZoom();
-      ctx.strokeStyle = `rgba(144,133,233,${z >= 15 ? 0.3 : z >= 13 ? 0.38 : 0.5})`;
+      const dim = state.run >= 0 ? 0.45 : 1;  // a selected run stands out against a dimmed glow
+      ctx.strokeStyle = `rgba(144,133,233,${(z >= 15 ? 0.3 : z >= 13 ? 0.38 : 0.5) * dim})`;
       ctx.lineWidth = z >= 15 ? 2 : z >= 13 ? 1.5 : 1.2;
       ctx.lineJoin = ctx.lineCap = "round";
       const b = m.getBounds().pad(0.1);
@@ -636,7 +693,7 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
   });
   const pins = lls.map((ll, i) => new Pin(ll, { renderer: pinRenderer, radius: 5, weight: 1.5, color: "#e6ebf0", fillOpacity: 1, kind: 0, sel: false })
     .bindTooltip(esc(cafeName[i]), { className: "cafe-tip", direction: "top", offset: [0, -6] })
-    .on("click", () => select(i, false)));
+    .on("click", e => { L.DomEvent.stopPropagation(e); select(i, false); }));  // a pin click is not a run click
   const overlay = L.layerGroup().addTo(map);
   // GD&T annotations: their own pane above the pins, never catching the mouse; laid out in screen
   // pixels, so they are redrawn on every zoom to keep a constant size.
@@ -644,6 +701,11 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
   map.getPane("annot").style.pointerEvents = "none";
   const annotRenderer = L.svg({ pane: "annot", padding: 0.5 });
   const annot = L.layerGroup().addTo(map);
+  // The selected (and hovered) run: above the cafe overlay, below the pins (620).
+  map.createPane("runs").style.zIndex = 610;
+  map.getPane("runs").style.pointerEvents = "none";
+  const runRenderer = L.canvas({ pane: "runs", padding: 0.3 });
+  const runLayer = L.layerGroup().addTo(map);
   let lastDetail = null;
   let labelled = null;
   map.on("zoomend", () => {
@@ -802,9 +864,27 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
             <span class="hint">Counts are runs. A run that passes on two streets counts once: its closest approach for ⌖ and its worst pass for ⌒. The street table counts passes.</span>
             <div class="tablewrap"><table><thead><tr><th data-tip="st-street">Street (nominal)</th><th data-tip="st-passes">Passes</th><th data-tip="st-pos">⌖</th><th data-tip="st-pro">⌒</th><th data-tip="st-both">Both</th><th data-tip="st-p95">⌒ p95</th><th data-tip="st-bias">Bias</th></tr></thead><tbody>` +
            d.feats.map(f => `<tr><td>${esc(f.name)}</td><td class="num">${f.passes}</td><td class="num">${f.pos}</td><td class="num">${f.pro}</td><td class="num">${f.both}</td><td class="num">${f.p95.toFixed(1)}</td><td class="num">${side(f)}</td></tr>`).join("") +
-           `</tbody></table></div>` + histogram(d.parts)
+           `</tbody></table></div>` + histogram(d.parts) + runsTable(d.parts)
          : `<p class="muted">No run passes within R = ${state.R} m of this cafe in the selected years.</p>`);
+    $("detail").querySelectorAll("tr[data-run]").forEach(tr => {
+      const run = +tr.dataset.run;
+      tr.addEventListener("mouseenter", () => hoverRun(run)); tr.addEventListener("mouseleave", () => hoverRun(-1));
+      tr.addEventListener("click", () => selectRun(run));
+    });
     decorateTips($("detail"));
+  }
+
+  // one row per run (part) at the selected cafe, by date; a row opens the run report
+  function runsTable(parts) {
+    const mark = b => b ? `<span class="yes">✓</span>` : `<span class="no">✗</span>`;
+    const rows = parts.slice().sort((a, b) => runDates[a.run] - runDates[b.run] || a.run - b.run);
+    return `<h3 data-tip="runs-table">Runs at this cafe <span class="hint">click a row to inspect the run</span></h3>
+      <div class="tablewrap runs-table"><table><thead><tr><th>Run</th><th>Ø (2d)</th><th>⌒ actual</th><th>⌖</th><th>⌒</th><th>Result</th></tr></thead><tbody>` +
+      rows.map(p => `<tr class="clickable${p.run === state.run ? " sel" : ""}" data-run="${p.run}">
+        <td><button type="button" class="linkbtn">${runDate(p.run)}</button></td>
+        <td class="num">Ø${(2 * p.d).toFixed(0)}</td><td class="num">${p.prof.toFixed(1)}</td><td class="num">${mark(p.pos)}</td><td class="num">${mark(p.pro)}</td>
+        <td class="${p.pos && p.pro ? "yes" : "no"}">${p.pos && p.pro ? "accepted" : "rejected"}</td></tr>`).join("") +
+      `</tbody></table></div>`;
   }
 
   // ---------- GD&T annotations on the map ----------
@@ -913,15 +993,202 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
     }
   }
 
+  function writeHash() {
+    const h = new URLSearchParams();
+    if (state.sel >= 0) h.set("cafe", String(cafeOsm[state.sel]));
+    if (state.show === "both") h.set("show", "both");
+    if (state.run >= 0) h.set("run", String(state.run + 1));  // the run's position in the build, never an activity id
+    history.replaceState(null, "", "#" + h.toString());
+  }
+
   function select(i, pan) {
     state.sel = i;
     if (pan) map.setView(lls[i], Math.max(map.getZoom(), 17), { animate: false });
-    const h = new URLSearchParams({ cafe: String(cafeOsm[i]) }); if (state.show === "both") h.set("show", "both");
-    history.replaceState(null, "", "#" + h.toString());
-    drawPins(); table(); drawDetail();
+    writeHash();
+    drawPins(); table(); drawDetail(); renderRunReport();
   }
 
-  function refresh() { evaluate(); drawPins(); table(); drawDetail(); }
+  function refresh() { evaluate(); drawPins(); table(); drawDetail(); drawRun(); renderRunReport(); }
+
+  // ---------- one run: picking, drawing, report (the engine answers; the page draws and words) ----------
+  function runReport(run) {
+    const k = M._ct_run_report(run), D = f64(M._ct_run_report_data(), 9 * k), rows = [];
+    for (let j = 0; j < k; j++) rows.push({ cafe: D[9 * j], d: D[9 * j + 1], prof: D[9 * j + 2], pos: !!D[9 * j + 3], pro: !!D[9 * j + 4],
+      along: D[9 * j + 5], street: streetName(D[9 * j + 6]), q: [D[9 * j + 7], D[9 * j + 8]] });
+    return rows;
+  }
+  const runLines = run => {
+    const out = [];
+    for (let k = 0; k < nParts; k++) {
+      if (partRun[k] !== run) continue;
+      const ll = []; for (let i = partStart[k]; i < partStart[k + 1]; i++) ll.push([pts[2 * i], pts[2 * i + 1]]);
+      out.push(ll);
+    }
+    return out;
+  };
+  // arrows along the run, oriented on screen (Mercator keeps angles, so they need no redraw on zoom)
+  function runArrows(lines) {
+    const flat = [].concat(...lines), seg = [];
+    let total = 0;
+    for (let i = 1; i < flat.length; i++) {
+      const a = flat[i - 1], b = flat[i], kx = 111320 * Math.cos(a[0] * Math.PI / 180);
+      const dx = (b[1] - a[1]) * kx, dy = (b[0] - a[0]) * 110540, l = Math.hypot(dx, dy);
+      seg.push({ a, dx, dy, l, at: total }); total += l;
+    }
+    return [0.15, 0.38, 0.62, 0.85].map(f => {
+      const s = seg.find(q => q.at + q.l >= f * total && q.l > 0.5);
+      return s ? { ll: s.a, deg: Math.atan2(-s.dy, s.dx) * 180 / Math.PI } : null;
+    }).filter(Boolean);
+  }
+  function drawRun() {
+    runLayer.clearLayers();
+    if (state.hover >= 0 && state.hover !== state.run)
+      L.polyline(runLines(state.hover), { renderer: runRenderer, color: "#f6f7f9", weight: 1.6, dashArray: "5 4", opacity: .9, interactive: false }).addTo(runLayer);
+    if (state.run < 0) return;
+    const lines = runLines(state.run);
+    L.polyline(lines, { renderer: runRenderer, color: "#f6f7f9", weight: 8, opacity: .14, interactive: false }).addTo(runLayer);
+    L.polyline(lines, { renderer: runRenderer, color: "#f6f7f9", weight: 2.4, opacity: 1, interactive: false }).addTo(runLayer);
+    runArrows(lines).forEach(a => L.marker(a.ll, { pane: "runs", interactive: false, keyboard: false,
+      icon: L.divIcon({ className: "", html: `<div class="run-arrow" style="transform: translate(-4px, -5px) rotate(${a.deg.toFixed(0)}deg)"></div>`, iconSize: [0, 0] }) }).addTo(runLayer));
+    runReport(state.run).forEach(w => {
+      const ok = w.pos && w.pro;
+      L.circleMarker(lls[w.cafe], { renderer: runRenderer, radius: 12, color: css(ok ? "--s-both" : "--s-none"), weight: 2.2,
+        dashArray: ok ? null : "3 2", fill: false, interactive: false }).addTo(runLayer);
+      L.circleMarker(w.q, { renderer: runRenderer, radius: 3, stroke: false, fillColor: "#f6f7f9", fillOpacity: 1, interactive: false }).addTo(runLayer);
+      L.marker(w.q, { pane: "runs", interactive: false, keyboard: false, icon: L.divIcon({ className: "", iconSize: [0, 0],
+        html: `<span class="run-dia" style="color:var(${w.pos ? "--s-both" : "--s-none"});border-color:var(${w.pos ? "--s-both" : "--s-none"})">Ø${(2 * w.d).toFixed(0)}</span>` }) }).addTo(runLayer);
+    });
+  }
+  function setTab(t) {
+    $("tab-cafes").hidden = t !== "cafes"; $("tab-run").hidden = t !== "run";
+    $("tab-cafes-btn").setAttribute("aria-selected", t === "cafes"); $("tab-run-btn").setAttribute("aria-selected", t === "run");
+  }
+  function selectRun(run) {
+    state.run = run; state.hover = -1;
+    map.closePopup(); setTab("run"); writeHash();
+    glow._draw(); drawRun(); renderRunReport(); drawDetail();
+  }
+  function clearRun() {
+    state.run = -1; state.hover = -1;
+    writeHash(); glow._draw(); drawRun(); renderRunReport(); drawDetail();
+  }
+  const hoverRun = run => { if (state.hover !== run) { state.hover = run; drawRun(); } };
+  // ◀ ▶ step through the runs at the selected cafe when the run is one of them, else through every shown run
+  function stepList() {
+    const byDate = (a, b) => runDates[a] - runDates[b] || a - b;
+    const here = lastDetail && lastDetail.i === state.sel ? lastDetail.d.parts.map(p => p.run) : [];
+    if (here.includes(state.run)) return { runs: here.sort(byDate), atCafe: true };
+    const all = []; for (let r = 0; r < nRuns; r++) if (state.years.has(runYears[r])) all.push(r);
+    return { runs: all.sort(byDate), atCafe: false };
+  }
+
+  function renderRunReport() {
+    const el = $("run-report");
+    if (state.run < 0) {
+      el.innerHTML = `<div class="stack-s"><h3>No run selected</h3><p class="muted">Click any run on the map. Where several runs overlap, a list lets you pick one by date.</p>
+        <p class="muted">Or select a cafe and click a row under "Runs at this cafe".</p></div>`;
+      return;
+    }
+    const run = state.run, rows = runReport(run), okN = rows.filter(w => w.pos && w.pro).length;
+    const best = rows.reduce((m, w) => (!m || w.d < m.d ? w : m), null), worst = rows.reduce((m, w) => (!m || w.prof > m.prof ? w : m), null);
+    const steps = stepList();
+    const LANES = [24, 2, 46], lastIn = [-99, -99, -99];  // on the line, above, below (px from the top)
+    const strip = rows.map((w, k) => { const ok = w.pos && w.pro, left = 100 * w.along / Math.max(1, runLen[run]);
+      let lane = LANES.findIndex((_, j) => left - lastIn[j] >= 6);
+      if (lane < 0) lane = lastIn.indexOf(Math.min(...lastIn));
+      lastIn[lane] = left;
+      return `<button type="button" data-cafe="${w.cafe}" aria-label="${k + 1}: ${esc(cafeName[w.cafe])}, ${ok ? "accepted" : "rejected"}. Select this cafe"
+        style="left:${left.toFixed(1)}%;top:${LANES[lane]}px;border-color:var(${ok ? "--s-both" : "--s-none"});background:${ok ? "var(--s-both)" : "var(--sheet)"};color:${ok ? "var(--paper)" : "var(--s-none)"}">${k + 1}</button>`; }).join("");
+    const mark = b => b ? `<span class="yes">✓</span>` : `<span class="no">✗</span>`;
+    let html = `<div class="rr-head"><div class="stack-s"><span class="eyebrow">Part report · run</span><h3>${runDate(run)}</h3>
+        <span class="actual">${km(runLen[run])} · run ${run + 1} of ${nRuns}</span></div>
+        <div class="rr-nav"><button type="button" data-act="prev" aria-label="Previous run">◀</button><button type="button" data-act="next" aria-label="Next run">▶</button>
+        <button type="button" data-act="clear" aria-label="Clear the run">✕</button></div></div>
+      <span class="hint">◀ ▶ step through ${steps.atCafe ? `the ${steps.runs.length} runs at ${esc(cafeName[state.sel])}` : "every shown run"}, by date</span>
+      <div class="rr-stats"><div><span class="eyebrow">Cafes passed</span><b>${rows.length}</b></div>
+        <div><span class="eyebrow">Accepted at</span><b class="yes">${okN}</b></div><div><span class="eyebrow">Rejected at</span><b class="no">${rows.length - okN}</b></div></div>`;
+    if (!rows.length) html += `<p class="muted">This run passes no cafe within R = ${state.R} m.</p>`;
+    else {
+      html += `<div class="actual">best Ø${(2 * best.d).toFixed(0)} at ${esc(cafeName[best.cafe])}<br>worst ⌒ ${worst.prof.toFixed(1)} m at ${esc(cafeName[worst.cafe])}, on ${esc(worst.street)}</div>
+        <div class="stack-s"><span class="eyebrow" data-tip="run-strip">Route strip</span>
+          <div class="rr-strip"><div class="line"></div><div class="end" style="left:0"></div><div class="end" style="right:0"></div>${strip}
+            <span class="km" style="left:0">0 km</span><span class="km" style="right:0">${km(runLen[run])}</span></div></div>
+        <div class="tablewrap"><table><thead><tr><th>#</th><th>Cafe</th><th>Ø</th><th>⌒</th><th>⌖</th><th>⌒</th></tr></thead><tbody>` +
+        rows.map((w, k) => `<tr class="clickable${w.cafe === state.sel ? " sel" : ""}" data-cafe="${w.cafe}"><td class="num ${w.pos && w.pro ? "yes" : "no"}">${k + 1}</td>
+          <td><button type="button" class="linkbtn" data-cafe="${w.cafe}">${esc(cafeName[w.cafe])}</button><div class="hint">on ${esc(w.street)} · ${km(w.along)} in</div></td>
+          <td class="num">Ø${(2 * w.d).toFixed(0)}</td><td class="num">${w.prof.toFixed(1)}</td><td class="num">${mark(w.pos)}</td><td class="num">${mark(w.pro)}</td></tr>`).join("") +
+        `</tbody></table></div>`;
+      html += runProfile(run);
+    }
+    el.innerHTML = html;
+    el.querySelectorAll("[data-act]").forEach(b => b.addEventListener("click", () => {
+      if (b.dataset.act === "clear") { clearRun(); return; }
+      const s = stepList().runs, k = s.indexOf(state.run);
+      if (s.length) selectRun(s[(k + (b.dataset.act === "next" ? 1 : -1) + s.length) % s.length]);
+    }));
+    el.querySelectorAll("button[data-cafe]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); select(+b.dataset.cafe, true); }));
+    el.querySelectorAll("tr[data-cafe]").forEach(tr => tr.addEventListener("click", () => select(+tr.dataset.cafe, true)));
+    decorateTips(el);
+  }
+
+  // one part's profile against its tolerance zone: the run's offsets along the street at the selected cafe
+  function runProfile(run) {
+    if (state.sel < 0) return "";
+    const k = M._ct_run_profile(state.sel, run);
+    if (!k) return "";
+    const D = f64(M._ct_run_profile_data(), 2 * k), street = streetName(M._ct_run_profile_street());
+    const p = []; for (let j = 0; j < k; j++) p.push([D[2 * j], D[2 * j + 1]]);
+    const half = state.band / 2, maxOff = Math.max(...p.map(q => Math.abs(q[1]))), span = Math.max(half * 1.5, maxOff * 1.15, 5);
+    const W = 360, H = 132, cy = 66, sy = 54 / span, sx = v => 180 + v / state.R * 160, yv = o => cy - o * sy;
+    const line = "M" + p.map(q => `${sx(q[0]).toFixed(1)} ${yv(q[1]).toFixed(1)}`).join(" L");
+    const top = p.reduce((m, q) => (Math.abs(q[1]) > Math.abs(m[1]) ? q : m), p[0]);
+    const prof = 2 * maxOff, ok = prof <= state.band, r = state.res[state.sel];
+    const row = runReport(run).find(w => w.cafe === state.sel);
+    return `<div class="stack-s" style="border-top:1.5px solid var(--frame);padding-top:12px">
+      <span class="eyebrow" data-tip="run-profile">This run at ${esc(cafeName[state.sel])}</span>
+      <svg class="rr-profile" viewBox="0 0 ${W} ${H}" role="img" aria-label="Offset of this run from the ${esc(street)} centreline inside R, against the ${state.band} m band">
+        <rect x="20" y="${yv(half).toFixed(1)}" width="320" height="${(2 * half * sy).toFixed(1)}" fill="#74a3ff" fill-opacity=".12"/>
+        <path d="M20 ${yv(half).toFixed(1)} H340 M20 ${yv(-half).toFixed(1)} H340" stroke="#9cc0ff" stroke-dasharray="5 3" fill="none"/>
+        <path d="M20 ${cy} H340" stroke="#74a3ff" stroke-width="1.2" stroke-dasharray="14 3 2 3" fill="none"/>
+        <path d="M180 12 V120" stroke="#97a3b0" stroke-dasharray="2 3" fill="none"/><text x="184" y="20" fill="#97a3b0">A</text>
+        <path d="${line}" style="stroke:var(${ok ? "--s-both" : "--s-none"})" stroke-width="2" stroke-linejoin="round" fill="none"/>
+        <path d="M${sx(top[0]).toFixed(1)} ${cy} V${yv(top[1]).toFixed(1)}" stroke="#f6f7f9" stroke-dasharray="2 2" fill="none"/>
+        <circle cx="${sx(top[0]).toFixed(1)}" cy="${yv(top[1]).toFixed(1)}" r="3.5" fill="#f6f7f9"/>
+        <text x="22" y="${(yv(half) - 4).toFixed(1)}" fill="#9cc0ff">+${half} m</text><text x="22" y="${(yv(-half) + 12).toFixed(1)}" fill="#9cc0ff">−${half} m</text>
+        <text x="22" y="128" fill="#97a3b0">−${state.R} m</text><text x="338" y="128" fill="#97a3b0" text-anchor="end">+${state.R} m along ${esc(street)}</text>
+      </svg>
+      <span class="actual">⌒ ${prof.toFixed(1)} m on this pass (band ${state.band}) ${ok ? "✓" : "✗"}` +
+      (row ? ` · Ø${(2 * row.d).toFixed(0)} (zone Ø${state.tol}) ${row.pos ? "✓" : "✗"}` : "") + `</span>
+      <span class="hint">The run's sideways offset along the street inside R, against the profile band. ⌒ actual = 2 × the largest offset.</span></div>`;
+  }
+
+  // a click on the map (not on a pin) asks the engine which runs pass within ~10 px of it
+  function pickerHtml(ids) {
+    const here = lastDetail && lastDetail.i === state.sel ? new Map(lastDetail.d.parts.map(p => [p.run, p])) : new Map();
+    return `<div class="pk-title">${ids.length} runs pass here</div><div class="pk-list">` + ids.map(r => {
+      const rows = runReport(r), ok = rows.filter(w => w.pos && w.pro).length, p = here.get(r);
+      const verdict = p ? (p.pos && p.pro ? `<span class="yes">accepted here</span>` : `<span class="no">rejected here</span>`) : "";
+      return `<button type="button" data-run="${r}"><b>${runDate(r)}</b><span class="r">${km(runLen[r])}</span>
+        <span class="sub">${rows.length} cafes · accepted at ${ok}</span><span class="r">${verdict}</span></button>`;
+    }).join("") + `</div><div class="pk-title muted" style="border:0;font:12px var(--f-body);text-transform:none;letter-spacing:0">Hover to highlight · click to inspect</div>`;
+  }
+  map.on("click", e => {
+    const ll = [e.latlng.lat, e.latlng.lng], r = Math.min(80, Math.max(4, 10 / pxPerMetre(ll)));
+    const k = M._ct_runs_at(ll[0], ll[1], r), H = f64(M._ct_runs_at_data(), 2 * k), ids = [];
+    for (let j = 0; j < k; j++) ids.push(H[2 * j]);
+    if (!ids.length) { map.closePopup(); return; }
+    if (ids.length === 1) { selectRun(ids[0]); return; }
+    ids.sort((a, b) => runDates[a] - runDates[b] || a - b);
+    const pop = L.popup({ className: "run-picker", maxWidth: 280, minWidth: 262, autoPanPadding: [24, 24] }).setLatLng(e.latlng)
+      .setContent(pickerHtml(ids.slice(0, 60))).openOn(map);
+    pop.getElement().querySelectorAll("button[data-run]").forEach(b => {
+      const run = +b.dataset.run;
+      b.addEventListener("mouseenter", () => hoverRun(run)); b.addEventListener("focus", () => hoverRun(run));
+      b.addEventListener("mouseleave", () => hoverRun(-1));
+      b.addEventListener("click", ev => { L.DomEvent.stopPropagation(ev); selectRun(run); });
+    });
+  });
+  map.on("popupclose", () => hoverRun(-1));
 
   // ---------- controls ----------
   const bind = (id, key, fmt, recut) => { const el = $(id), out = $(id + "-out");
@@ -946,6 +1213,7 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
     const y = +b.dataset.y;
     if (state.years.has(y) && state.years.size > 1) state.years.delete(y); else state.years.add(y);
     $("years").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", state.years.has(+x.dataset.y)));
+    if (state.run >= 0 && !state.years.has(runYears[state.run])) { state.run = -1; writeHash(); }  // its year is hidden now
     glow._draw(); refresh();
   }));
   const setShow = mode => {
@@ -957,6 +1225,8 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
   $("show-both").addEventListener("click", () => setShow("both"));
   $("search").addEventListener("input", e => { state.query = e.target.value; table(); });
   $("annot").addEventListener("change", e => { state.annot = e.target.checked; drawAnnotations(); });
+  $("tab-cafes-btn").addEventListener("click", () => setTab("cafes"));
+  $("tab-run-btn").addEventListener("click", () => setTab("run"));
   $("legend").innerHTML = STATUS.map((s, k) => `<span data-tip="status-${k}">${sym(k)}${esc(s.label)}</span>`).join("") +
     `<span class="pen" data-tip="notes">① checker's note</span>`;
   decorateTips($("legend"));
@@ -972,6 +1242,8 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
     const best = state.res.filter(r => r.status === 0).sort((a, b) => b.runs - a.runs)[0] || state.res.slice().sort((a, b) => b.runs - a.runs)[0];
     if (best) select(best.i, true); else refresh();
   }
+  const wantRun = +(hash.get("run") || 0) - 1;  // #run=<n> reopens a run report
+  if (wantRun >= 0 && wantRun < nRuns) selectRun(wantRun); else renderRunReport();
 })();
 </script>
 </body>

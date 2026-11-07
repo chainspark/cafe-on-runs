@@ -228,7 +228,15 @@ The engine owns the rules, their thresholds (`kNote*` in `gdt.hpp`) and the numb
 
 On the real data about one cafe in eight gets a note. `tests/test_gdt.cpp` covers each rule, its threshold and the cap.
 
-### 5.7 Cost
+### 5.7 One run across every cafe: `runs_at`, `run_report`, `run_profile`
+
+- **`runs_at(p, r, year_mask)`:** the runs under a map click. A point-grid query of r + 15 m finds candidate points, then each point and its segment to the next point in the same part is measured, so a click between two GPS points still hits. It keeps the nearest distance per run, filtered by year, nearest first. The page passes r = 10 screen pixels in metres.
+- **`run_report(run, s)`:** for every cafe, the run's passes there are folded exactly like `parts_of` (min d, max prof) and scored with the settings. Each row keeps the street and foot of the nearest pass and its distance along the run, `pt_along_[qi] + |p[qi] − q|`, and rows are sorted by that distance (route order).
+  - `Pass::qi` is the segment start of the closest approach, set in `measure`.
+  - `pt_along_` and `run_len_` are cumulative distances per point and per run, built once in `load`. A gap between parts counts as a straight line.
+- **`run_profile(cafe, run)`:** the points of the run's nearest pass at that cafe, each as (x, offset). Offsets come from the same `offset_of` helper `measure` uses, so strays are measured against the pass's street. x is the position along the street relative to the cafe, on the canonical normal turned clockwise: + east on E–W streets, + north on N–S ones.
+
+### 5.8 Cost
 
 - **`load`:** linear in points, with one grid lookup per point.
 - **`set_radius`:** one grid query per cafe, then work linear in the points inside R.
@@ -263,6 +271,10 @@ Strings are read with `UTF8ToString`.
 | `ct_detail_line_names()` | i32 street name id per nominal line / band, which ties the ⌒ annotations to a street |
 | `ct_notes(i)`, `ct_notes_data()` | Number of checker's notes for cafe i, then f64 × 5 per note: kind, a, b, c, street id (§5.6). Uses the settings of the last `ct_evaluate` |
 | `ct_note_counts()` | i32 note count per cafe, for the table's ① marks. Uses the settings of the last `ct_evaluate` |
+| `ct_run_dates()`, `ct_run_lengths()` | i32 yyyymmdd per run (dd = 00 in public builds), f64 metres per run |
+| `ct_runs_at(lat, lon, r)`, `ct_runs_at_data()` | Number of runs within r m of a point, then f64 × 2 per run: run, distance. Nearest first, year mask of the last `ct_evaluate` (§5.7) |
+| `ct_run_report(run)`, `ct_run_report_data()` | Number of cafes the run passed, then f64 × 9 per cafe in route order: cafe, d, prof, ⌖ ok, ⌒ ok, along (m), street id, q_lat, q_lon |
+| `ct_run_profile(cafe, run)`, `ct_run_profile_data()`, `ct_run_profile_street()` | Number of points, then f64 × 2 per point: x along the street, offset; and the street name id |
 
 When adding a function, mark it `EMSCRIPTEN_KEEPALIVE`, add it to the export list in
 `build.sh`, and document its buffer layout here.
@@ -298,6 +310,13 @@ When adding a function, mark it `EMSCRIPTEN_KEEPALIVE`, add it to the export lis
   - **Panel:** the selected cafe's notes come from `ct_notes`.
   - **Map:** the first note is written above the R circle, and hidden when R is under 30 px.
   - **Table:** the ① marks come from one `ct_note_counts` call, cached per setting.
+- **Run inspection:**
+  - A map click that misses a pin calls `ct_runs_at`. One hit opens that run; several open a Leaflet popup listing them by date. Hovering a row draws that run dashed.
+  - The selected run is drawn on a `runs` pane (z 610, between the cafe overlay and the pins) with arrows (`divIcon`s rotated to the screen bearing; Mercator keeps angles, so they need no redraw on zoom), verdict rings and Ø labels from `ct_run_report`.
+  - The Glow layer dims while a run is selected.
+  - The panel's **Run report** tab renders the report, the route strip (marks placed at along / length, stacked on three lanes when close), and the profile from `ct_run_profile`.
+  - "Runs at this cafe" is built from `ct_detail` parts.
+  - The URL hash carries `run=<index + 1>`.
 - **Zoom limit:** the map's `maxBounds` is the City of Toronto box (`opendata.TORONTO`, copied into the page), and `minZoom` is `getBoundsZoom(CITY, true)`, recomputed on resize, so the view never shows beyond the city.
 - **URL hash:** `#cafe=<osm id>&show=both` selects a cafe and the filter on load, and the hash is updated on every selection. Use it to share a view or take screenshots.
 - **Tooltips:** `data-tip` keys on every control, column header, frame and status point into one `TIPS` table. A single `position: fixed` element (`role=tooltip`, linked with `aria-describedby`) shows on mouse hover, keyboard focus or a tap, so scrolling tables never clip it. Escape or moving away hides it. Non-interactive anchors get a dotted underline and `tabindex=0`. A `TIPS` entry may carry a fourth item, a function returning an inline SVG infographic (`figPos`, `figPro`): a schematic zone or band, one conforming and one failing run, and a mini feature control frame, scaled to the current `state.tol` / `state.band`. The figures use `currentColor` for the zone and band and `--tip-ok` / `--tip-bad` for the runs. An `input` event redraws an open slider tip, and on touch a tap on a slider or its label shows the tip, because a tapped range input takes no focus.

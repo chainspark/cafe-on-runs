@@ -26,6 +26,12 @@ std::vector<float> g_lines, g_bands;
 std::vector<int32_t> g_line_names;
 std::vector<double> g_notes;          // 5 per note: kind, a, b, c, street name id
 std::vector<int32_t> g_note_counts;   // per cafe
+std::vector<int32_t> g_dates;         // yyyymmdd per run (day 0 in public builds)
+std::vector<double> g_run_len;        // metres per run
+std::vector<double> g_hits;           // 2 per hit: run, distance
+std::vector<double> g_report;         // 9 per row: cafe, d, prof, pos, pro, along, street, q_lat, q_lon
+std::vector<double> g_profile;        // 2 per point: x along the street, offset
+int g_profile_street = -1;
 
 void flatten(const std::vector<std::vector<ct::LatLon>>& polys, std::vector<int32_t>& start, std::vector<float>& xy) {
     start.assign(1, 0);
@@ -47,9 +53,12 @@ EMSCRIPTEN_KEEPALIVE int ct_init() {
     const auto& tr = g_engine.track();
     g_points.clear();
     for (const auto& q : tr.ll) { g_points.push_back(float(q.lat)); g_points.push_back(float(q.lon)); }
-    for (const auto& run : g_engine.data().runs) {
+    for (size_t r = 0; r < g_engine.data().runs.size(); ++r) {
+        const auto& run = g_engine.data().runs[r];
         g_years.push_back(run.year);
         g_run_ids.push_back(double(run.activity_id));
+        g_dates.push_back(run.year * 10000 + run.month * 100 + run.day);
+        g_run_len.push_back(g_engine.run_length(int(r)));
     }
     for (const auto& c : g_engine.data().cafes) {
         g_cafe_ll.push_back(c.pos.lat);
@@ -65,6 +74,8 @@ EMSCRIPTEN_KEEPALIVE const char* ct_meta() { return g_engine.data().meta.c_str()
 EMSCRIPTEN_KEEPALIVE int ct_run_count() { return int(g_engine.data().runs.size()); }
 EMSCRIPTEN_KEEPALIVE const int32_t* ct_run_years() { return g_years.data(); }
 EMSCRIPTEN_KEEPALIVE const double* ct_run_ids() { return g_run_ids.data(); }
+EMSCRIPTEN_KEEPALIVE const int32_t* ct_run_dates() { return g_dates.data(); }  // yyyymmdd; dd = 00 in public builds
+EMSCRIPTEN_KEEPALIVE const double* ct_run_lengths() { return g_run_len.data(); }
 EMSCRIPTEN_KEEPALIVE int ct_point_count() { return int(g_engine.track().p.size()); }
 EMSCRIPTEN_KEEPALIVE const float* ct_points() { return g_points.data(); }
 EMSCRIPTEN_KEEPALIVE int ct_part_count() { return int(g_engine.track().part_run.size()); }
@@ -141,5 +152,36 @@ EMSCRIPTEN_KEEPALIVE const int32_t* ct_note_counts() {
         g_note_counts[c] = int32_t(ct::Engine::notes(g_engine.detail(c, g_settings, false), g_settings).size());
     return g_note_counts.data();
 }
+
+// ---- one run ----
+// Runs (in the year mask of the last ct_evaluate) passing within r metres of a point, nearest first.
+EMSCRIPTEN_KEEPALIVE int ct_runs_at(double lat, double lon, double r) {
+    const auto hits = g_engine.runs_at(ct::project(lat, lon), r, g_settings.year_mask);
+    g_hits.clear();
+    for (const auto& h : hits) g_hits.insert(g_hits.end(), {double(h.run), h.d});
+    return int(hits.size());
+}
+EMSCRIPTEN_KEEPALIVE const double* ct_runs_at_data() { return g_hits.data(); }  // 2 per hit
+// Every cafe the run passed within R, in route order, scored with the settings of the last ct_evaluate.
+EMSCRIPTEN_KEEPALIVE int ct_run_report(int run) {
+    const auto rows = g_engine.run_report(run, g_settings);
+    g_report.clear();
+    for (const auto& w : rows) {
+        g_report.insert(g_report.end(), {double(w.cafe), w.part.d, w.part.prof, double(w.part.pos), double(w.part.pro),
+                                         w.along, double(w.street), ct::unproject_lat(w.q), ct::unproject_lon(w.q)});
+    }
+    return int(rows.size());
+}
+EMSCRIPTEN_KEEPALIVE const double* ct_run_report_data() { return g_report.data(); }  // 9 per row
+// The run's offset profile at one cafe: the pass that gave its closest approach.
+EMSCRIPTEN_KEEPALIVE int ct_run_profile(int cafe, int run) {
+    const auto pr = g_engine.run_profile(cafe, run);
+    g_profile.clear();
+    for (const auto& p : pr.pts) g_profile.insert(g_profile.end(), {p.x, p.off});
+    g_profile_street = pr.street;
+    return int(pr.pts.size());
+}
+EMSCRIPTEN_KEEPALIVE const double* ct_run_profile_data() { return g_profile.data(); }  // 2 per point
+EMSCRIPTEN_KEEPALIVE int ct_run_profile_street() { return g_profile_street; }
 
 }  // extern "C"

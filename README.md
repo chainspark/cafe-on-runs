@@ -23,7 +23,8 @@ crossing or a detour, and tolerances decide how much of that variation is accept
   - **Signed offsets:** these use a canonical normal (+ north on east–west streets, + west on north–south ones), so a street's bias reads as a side of the street.
   - **Deterministic:** results are plain geometry with no fitted model, so the same data and settings always give the same answer.
 - **Checker's notes:** the C++ engine decides which facts about a cafe's runs are worth pointing out (`Engine::notes`); the page only words them.
-- **Tests:** 58 C++ checks, run in a pinned Emscripten Docker image (`bash build.sh test`).
+- **Run inspection:** the engine finds the runs under a click (a grid query, then segment distances) and reports one run across every cafe it passed, in route order, plus its offset profile at a cafe.
+- **Tests:** 76 C++ checks, run in a pinned Emscripten Docker image (`bash build.sh test`).
 - **Python pipeline:**
   - reads FIT files, OpenStreetMap and City of Toronto open data
   - writes a versioned binary dataset (zigzag varints at 1e-5°, with a provenance header) that is compiled into the module
@@ -92,6 +93,13 @@ The page is a dark engineering drawing sheet: a zone-marked border, drawing lett
   - ⌒ p95 over the band by at most 8 m, while ≥ 80% of runs hold it (from 10 runs)
   - exactly one run failing both callouts (from 15 runs)
   - every run accepted (from 10 runs)
+- **Inspecting one run** (a part):
+  - **Click a run** anywhere on the map. Where runs overlap, a list shows every run under the click by date; hovering a row draws that run dashed, and "accepted / rejected here" gives its verdict at the selected cafe.
+  - **Runs at this cafe**, under the selected cafe's frames: one row per run with its Ø, ⌒ actual and verdicts. A row opens the run.
+  - **On the map** the run is drawn in white with arrows for its direction, the glow is dimmed, and every cafe it passed gets a ring (green accepted, dashed orange rejected) with its Ø at the closest approach.
+  - **Run report** tab: the date, length, cafes passed, accepted and rejected, the best Ø and worst ⌒, a **route strip** (the run as one line, with a mark where each cafe was passed), and the cafes in route order. ◀ ▶ step through the runs at the selected cafe, by date.
+  - **This run at the cafe:** the run's sideways offset along the street inside R, against the band.
+  - `#run=<n>` in the URL reopens a run. It is the run's position in the build, never a Garmin activity id.
 - **Controls:**
   - R (30–150 m), Ø (10–200 m, never more than 2R), band (10–60 m) and acceptance (50–100%)
   - year chips, "All / Conform to both", and search
@@ -173,6 +181,7 @@ The public build never shows where I live.
   - Zone centres are shifted at random, and the shifts are kept stable in `data/privacy.json`.
 - **Dropped cafes:** any cafe within a zone radius + 150 m (the largest R), so no pass can touch a zone, and any street piece inside a zone.
 - **Dropped names:** the names of my most-run neighbourhoods never appear.
+- **Dates:** a public build stores only the month and year of each run (the day is 0 in the data), so the run report shows "Jun 2025". `privacy.check` fails a public page that holds a day of the month.
 - **The publish check:** `publish` scans the page text and also decodes the dataset compiled into the wasm, checking every coordinate and name. A wasm module without a readable dataset fails the check.
 
 `data/`, `output/`, `docs/`, `wasm/cafe_tol/generated/` and `wasm/cafe_tol/build/` hold GPS data. They are gitignored and never committed. Publishing is manual: run `publish`, review `docs/`, then commit it yourself.

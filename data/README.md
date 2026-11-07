@@ -32,7 +32,7 @@ Only a subset of this data is compiled into a page:
 The page lists that provenance under **About this project → Data sources**.
 
 Public builds are scrubbed first: the start and finish of each run are trimmed, privacy zones
-are removed, and forbidden names are dropped. `publish` then decodes the data back out of the
+are removed, forbidden names are dropped, and each run keeps only the month and year it was run. `publish` then decodes the data back out of the
 page and refuses to publish anything that falls inside a private place. See the Privacy section
 of the top-level README.
 

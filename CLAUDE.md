@@ -48,6 +48,7 @@ A GD&T-style tolerance analysis of the owner's Garmin runs past Toronto cafes.
 - **Offsets use a canonical normal:** + is north for E–W streets and west for N–S streets, so the bias can be read as a side of the street.
 - **Year filter:** a bitmask with bit (year − 2000).
 - **Checker's notes** (`Engine::notes`, `kNote*` constants): the C++ owns the rules, thresholds and numbers. The page's `NOTE_TEXT` owns only the wording, one sentence per kind.
+- **Run inspection** (`runs_at`, `run_report`, `run_profile`): same split. The C++ finds and scores one run across every cafe (folded like `parts_of`); the page draws it and words it.
 
 ## Privacy
 - `data/`, `output/` and `docs/` are gitignored. **Never commit or publish them, `generated/` or `build/`.** The one exception is `data/README.md` (`data/*` + `!data/README.md`): notes on the data sources with no data in them. Keep it current when inputs change.
@@ -61,6 +62,7 @@ A GD&T-style tolerance analysis of the owner's Garmin runs past Toronto cafes.
   - zone-tests every run point, street point and cafe
   - name-scans the cafe and street names
   - **fails** on a wasm with no readable dataset
+  - **fails** on a run that carries a day of the month: public builds store only year and month (`cafes._runs(public=True)` writes day 0). The page shows "Jun 2025".
 
   If the check fails, fix the cause. Don't loosen the check.
 - **Forbidden names:** the top-5 neighbourhoods by run count (`privacy.forbidden_names`).

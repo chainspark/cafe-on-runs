@@ -40,6 +40,15 @@ bool Engine::load(Dataset ds, std::string& err) {
     flatten_runs(ds_, tr_);
     match_points(net_, tr_);
     for (uint32_t i = 0; i < tr_.p.size(); ++i) pt_grid_.insert_point(i, tr_.p[i]);
+    // distance along each run, for placing cafes on a run's route strip
+    pt_along_.assign(tr_.p.size(), 0.f);
+    run_len_.assign(ds_.runs.size(), 0.0);
+    for (size_t i = 1; i < tr_.p.size(); ++i) {
+        const int32_t run = tr_.part_run[tr_.pt_part[i]], prev = tr_.part_run[tr_.pt_part[i - 1]];
+        const double a = run == prev ? double(pt_along_[i - 1]) + dist(tr_.p[i - 1], tr_.p[i]) : 0.0;
+        pt_along_[i] = float(a);
+        run_len_[run] = a;
+    }
     cafe_xy_.clear();
     for (const auto& c : ds_.cafes) cafe_xy_.push_back(project(c.pos.lat, c.pos.lon));
     passes_.assign(ds_.cafes.size(), {});
@@ -54,28 +63,19 @@ void Engine::measure(Pass& ps, const P& cafe) const {
     if (ps.start == ps.end) {
         ps.d = dist(cafe, p[ps.start]);
         ps.q = p[ps.start];
+        ps.qi = ps.start;
     }
     for (int32_t k = ps.start; k < ps.end; ++k) {
         const SegHit h = seg_dist(cafe, p[k], p[k + 1]);
-        if (h.d < ps.d) { ps.d = h.d; ps.q = h.q; }
+        if (h.d < ps.d) { ps.d = h.d; ps.q = h.q; ps.qi = k; }
     }
     double max_abs = 0, sum = 0, nxs = 0, nys = 0;
     int count = 0;
     std::set<int32_t> pieces;
     for (int32_t i = ps.start; i <= ps.end; ++i) {
         double off, nx, ny;
-        if (tr_.name[i] == ps.name) {
-            off = tr_.off[i];
-            nx = tr_.nx[i];
-            ny = tr_.ny[i];
-            pieces.insert(tr_.piece[i]);
-        } else {  // a stray (or unmatched) point still counts against this pass's street
-            const OffsetHit h = offset_to_street(net_, p[i], ps.name, kStraySearchM);
-            if (h.piece < 0) continue;
-            off = h.off;
-            nx = h.nx;
-            ny = h.ny;
-        }
+        if (!offset_of(i, ps.name, off, nx, ny)) continue;
+        if (tr_.name[i] == ps.name) pieces.insert(tr_.piece[i]);
         max_abs = std::max(max_abs, std::fabs(off));
         sum += off;
         nxs += nx;
@@ -87,6 +87,90 @@ void Engine::measure(Pass& ps, const P& cafe) const {
     const double nl = std::hypot(nxs, nys);
     if (nl > 1e-9) { ps.nx = nxs / nl; ps.ny = nys / nl; }
     ps.pieces.assign(pieces.begin(), pieces.end());
+}
+
+bool Engine::offset_of(int32_t i, int32_t name, double& off, double& nx, double& ny) const {
+    if (tr_.name[i] == name) {
+        off = tr_.off[i];
+        nx = tr_.nx[i];
+        ny = tr_.ny[i];
+        return true;
+    }
+    // a stray (or unmatched) point still counts against this pass's street
+    const OffsetHit h = offset_to_street(net_, tr_.p[i], name, kStraySearchM);
+    if (h.piece < 0) return false;
+    off = h.off;
+    nx = h.nx;
+    ny = h.ny;
+    return true;
+}
+
+std::vector<RunHit> Engine::runs_at(const P& p, double r, uint32_t year_mask) const {
+    std::map<int32_t, double> best;  // run -> nearest distance
+    // points are ~5 m apart, so a segment passing within r has an end within r + its length;
+    // query a little wider and measure the segments, so a click between two points still hits
+    pt_grid_.query(p, r + 15, [&](uint32_t id) {
+        const int32_t part = tr_.pt_part[id], run = tr_.part_run[part];
+        if (!in_years(run, year_mask)) return;
+        double d = dist(p, tr_.p[id]);
+        if (id + 1 < tr_.p.size() && tr_.pt_part[id + 1] == part) d = std::min(d, seg_dist(p, tr_.p[id], tr_.p[id + 1]).d);
+        if (d > r) return;
+        auto it = best.find(run);
+        if (it == best.end() || d < it->second) best[run] = d;
+    });
+    std::vector<RunHit> out;
+    for (const auto& [run, d] : best) out.push_back({run, d});
+    std::sort(out.begin(), out.end(), [](const RunHit& a, const RunHit& b) { return a.d != b.d ? a.d < b.d : a.run < b.run; });
+    return out;
+}
+
+std::vector<RunRow> Engine::run_report(int run, const Settings& s) const {
+    std::vector<RunRow> out;
+    if (run < 0 || size_t(run) >= ds_.runs.size()) return out;
+    for (size_t c = 0; c < passes_.size(); ++c) {
+        const Pass* nearest = nullptr;
+        Part part;
+        part.run = run;
+        for (const auto& ps : passes_[c]) {
+            if (ps.run != run) continue;
+            part.d = std::min(part.d, ps.d);           // the same fold as parts_of
+            part.prof = std::max(part.prof, ps.prof);
+            if (!nearest || ps.d < nearest->d) nearest = &ps;
+        }
+        if (!nearest) continue;
+        part.pos = 2 * part.d <= s.tol_diam;
+        part.pro = part.prof <= s.band;
+        RunRow row;
+        row.cafe = int32_t(c);
+        row.part = part;
+        row.street = nearest->name;
+        row.q = nearest->q;
+        row.along = nearest->qi >= 0 ? pt_along_[nearest->qi] + dist(tr_.p[nearest->qi], nearest->q) : 0;
+        out.push_back(row);
+    }
+    std::sort(out.begin(), out.end(), [](const RunRow& a, const RunRow& b) { return a.along < b.along; });
+    return out;
+}
+
+RunProfile Engine::run_profile(int cafe, int run) const {
+    RunProfile out;
+    if (cafe < 0 || size_t(cafe) >= passes_.size()) return out;
+    const Pass* nearest = nullptr;
+    for (const auto& ps : passes_[cafe])
+        if (ps.run == run && (!nearest || ps.d < nearest->d)) nearest = &ps;
+    if (!nearest) return out;
+    out.street = nearest->name;
+    out.d = nearest->d;
+    out.prof = nearest->prof;
+    // along-street axis: the canonical normal turned clockwise, so + is east on E-W streets, north on N-S
+    const double tx = nearest->ny, ty = -nearest->nx;
+    const P c = cafe_xy_[cafe];
+    for (int32_t i = nearest->start; i <= nearest->end; ++i) {
+        double off, nx, ny;
+        if (!offset_of(i, nearest->name, off, nx, ny)) continue;
+        out.pts.push_back({(tr_.p[i].x - c.x) * tx + (tr_.p[i].y - c.y) * ty, off});
+    }
+    return out;
 }
 
 std::vector<Pass> Engine::cut_passes(const P& cafe, double r) const {

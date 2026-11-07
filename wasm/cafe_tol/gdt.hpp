@@ -26,6 +26,7 @@ struct Pass {
     int32_t start = 0, end = 0;   // inclusive point indices into Track
     double d = INFINITY;          // closest approach to the cafe (m)
     P q;                          // where it happened
+    int32_t qi = -1;              // ... on the segment starting at this point index
     double prof = 0;              // 2 x max |offset| from the centreline (m)
     double mean_off = 0;          // bias: + = north side (E-W streets) / west side (N-S streets)
     double nx = 0, ny = 1;        // mean canonical normal, to name the side
@@ -90,6 +91,30 @@ struct Note {
     int32_t street = -1;  // street name id, for kNoteSide
 };
 
+// ---- inspecting one run (a part) across every cafe ----
+struct RunHit {
+    int32_t run = -1;
+    double d = INFINITY;  // distance from the query point to the run's track (m)
+};
+// One cafe a run passed: the run's part there, and where along the run it happened.
+struct RunRow {
+    int32_t cafe = -1;
+    Part part;
+    double along = 0;     // distance along the run to its closest approach (m)
+    int32_t street = -1;  // street name id of the pass that gave the closest approach
+    P q;                  // the closest approach
+};
+struct ProfilePt {
+    double x = 0;    // position along the street relative to the cafe (m), + east / north
+    double off = 0;  // signed offset from the centreline (m), canonical normal
+};
+// A run's offsets at one cafe: the pass that gave its closest approach, point by point.
+struct RunProfile {
+    int32_t street = -1;
+    double d = INFINITY, prof = 0;
+    std::vector<ProfilePt> pts;
+};
+
 class Engine {
 public:
     bool load(Dataset ds, std::string& err);
@@ -100,6 +125,14 @@ public:
     Detail detail(int cafe, const Settings& s, bool geometry = true) const;
     // The checker's notes for one cafe's detail (see NoteKind).
     static std::vector<Note> notes(const Detail& d, const Settings& s);
+
+    // Runs (in the year mask) whose track passes within r of p, nearest first.
+    std::vector<RunHit> runs_at(const P& p, double r, uint32_t year_mask) const;
+    // Every cafe the run passed within R, in the order it passed them, with the run's part at each.
+    std::vector<RunRow> run_report(int run, const Settings& s) const;
+    // The run's offset profile at one cafe (empty if it didn't pass within R).
+    RunProfile run_profile(int cafe, int run) const;
+    double run_length(int run) const { return run >= 0 && size_t(run) < run_len_.size() ? run_len_[run] : 0; }
 
     const Dataset& data() const { return ds_; }
     const Track& track() const { return tr_; }
@@ -115,6 +148,8 @@ private:
     bool in_years(int32_t run, uint32_t mask) const;
     std::vector<Part> parts_of(const std::vector<Pass>& ps, const Settings& s) const;
     void measure(Pass& ps, const P& cafe) const;
+    // Signed offset of point i from street `name`: its own match, or a stray measured against the street.
+    bool offset_of(int32_t i, int32_t name, double& off, double& nx, double& ny) const;
 
     Dataset ds_;
     Network net_;
@@ -123,6 +158,8 @@ private:
     std::vector<P> cafe_xy_;
     std::vector<std::vector<Pass>> passes_;
     std::vector<CafeResult> results_;
+    std::vector<float> pt_along_;   // distance along its run to each point (m); gaps count as straight lines
+    std::vector<double> run_len_;
     double radius_ = 0;
 };
 

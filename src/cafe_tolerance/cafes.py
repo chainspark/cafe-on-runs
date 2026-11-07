@@ -115,7 +115,7 @@ def _meta(public: bool, trim_m: float, runs: list[cafe_blob.Run], n_pts: int, n_
     """
     from .opendata import source as street_source
 
-    dates = [dt.date(r.year, r.month, r.day) for r in runs]
+    dates = [dt.date(r.year, r.month, max(1, r.day)) for r in runs]  # public runs carry day 0
     years = f"{min(dates).year}–{max(dates).year}" if dates else "none"
     run_detail = f"{len(runs):,} runs, {n_pts:,} GPS points, {years}, inside the City of Toronto."
     if public:
@@ -172,7 +172,9 @@ def _tracks(public: bool, trim_m: float) -> pd.DataFrame:
     return t.sort_values(["activity_id", "ts"]).reset_index(drop=True)
 
 
-def _runs(t: pd.DataFrame) -> list[cafe_blob.Run]:
+def _runs(t: pd.DataFrame, public: bool = False) -> list[cafe_blob.Run]:
+    """One Run per activity, split into parts at gaps. Public builds keep only the year and month of
+    each run (day 0), so the page can't show, and the data doesn't hold, the day you ran somewhere."""
     acts = {a["activityId"]: a for a in json.loads(SUMMARIES.read_text(encoding="utf-8"))}
     runs = []
     for aid, g in t.groupby("activity_id", sort=True):
@@ -183,7 +185,7 @@ def _runs(t: pd.DataFrame) -> list[cafe_blob.Run]:
         cut = np.flatnonzero((step > GAP_M) | (np.nan_to_num(dd) > GAP_M))
         parts = [p for p in np.split(ll, cut) if len(p) >= 2]
         start = pd.to_datetime((acts.get(aid) or {}).get("startTimeLocal") or g["ts"].iloc[0])
-        runs.append(cafe_blob.Run(int(aid), start.year, start.month, start.day, parts))
+        runs.append(cafe_blob.Run(int(aid), start.year, start.month, 0 if public else start.day, parts))
     return runs
 
 
@@ -222,7 +224,7 @@ def export(public: bool = False, trim_m: float = privacy.DEFAULT_TRIM_M, refresh
     """Write wasm/cafe_tol/generated/dataset_<target>.inc and return its path."""
     target = "public" if public else "private"
     t = _tracks(public, trim_m)
-    runs = _runs(t)
+    runs = _runs(t, public)
     pts = np.vstack([p for r in runs for p in r.parts])
     zones = privacy.zones() if public else None
     forbidden = privacy.forbidden_names() if public else []
