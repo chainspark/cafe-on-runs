@@ -407,7 +407,7 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
   const sym = s => `<svg class="sym" viewBox="0 0 12 12" aria-hidden="true">${SHAPES[s](`var(${STATUS[s].color})`)}</svg>`;
 
   $("foot-mode").textContent = MODE === "public"
-    ? "Public build: the first and last 500 m of every run and every privacy zone are removed before the data is compiled in."
+    ? "Public build: the first and last 500 m of every run are removed and dates kept to month and year before the data is compiled in."
     : "Private build: contains full GPS tracks. Do not publish this file.";
 
   // ---------- tooltips for every parameter and readout ----------
@@ -572,7 +572,7 @@ footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(-
 
   // ---------- about: scroll link (keeps the #cafe=... hash) and data sources ----------
   $("about-link").addEventListener("click", e => { e.preventDefault(); $("about").scrollIntoView({ behavior: "smooth", block: "start" }); });
-  const PRIVACY_PUBLIC = "This public copy hides where I start and finish. The first and last 500 m of every run are removed, along with everything inside zones around places where many runs begin or end, and the zone centres are shifted at random. Cafes and streets near those zones are left out, and so are the names of the neighbourhoods I run in most. Before publishing, a check decodes the data inside this page and refuses to publish if anything falls inside a hidden zone.";
+  const PRIVACY_PUBLIC = "This public copy trims the first and last 500 m of every run, keeps only the month and year each run was made, and leaves out the names of the neighbourhoods I run in most. Before publishing, a check decodes the data inside this page and refuses to publish if it holds one of those names or an exact date.";
   const PRIVACY_PRIVATE = "Private build: full GPS tracks, including where runs start and finish. Do not share this file.";
   // display assets that are not part of the dataset
   const PAGE_SOURCES = [

@@ -34,8 +34,8 @@ crossing or a detour, and tolerances decide how much of that variation is accept
   - chains and non-cafes are excluded by OSM name and brand
   - R's range of 30–150 m was set by measuring cafe setbacks and the spacing to the next parallel street ([ARCHITECTURE.md §8](ARCHITECTURE.md))
 - **Privacy by construction:**
-  - the public build trims each run's ends and removes privacy zones
-  - the publish step decodes the dataset back out of the compiled WebAssembly and fails if any point falls in a private zone
+  - the public build trims each run's ends, keeps only month-and-year dates and drops the most-run neighbourhood names
+  - the publish step decodes the dataset back out of the compiled WebAssembly and fails on a forbidden name or an exact date
 
 ## What this project does
 
@@ -176,16 +176,15 @@ The URL hash `#cafe=<osm id>&show=both` opens the page on one cafe, with only th
 
 ## Privacy
 
-The public build never shows where I live.
-
-- **Trims and zones:**
-  - The first and last 500 m of every run are removed.
-  - Places where many runs start or finish become privacy zones, and every point inside them is removed.
-  - Zone centres are shifted at random, and the shifts are kept stable in `data/privacy.json`.
-- **Dropped cafes:** any cafe within a zone radius + 150 m (the largest R), so no pass can touch a zone, and any street piece inside a zone.
-- **Dropped names:** the names of my most-run neighbourhoods never appear.
-- **Dates:** a public build stores only the month and year of each run (the day is 0 in the data), so the run report shows "Jun 2025". `privacy.check` fails a public page that holds a day of the month.
-- **The publish check:** `publish` scans the page text and also decodes the dataset compiled into the wasm, checking every coordinate and name. A wasm module without a readable dataset fails the check.
+- **Trim:** the first and last 500 m of every run are removed, so a run's own start and finish don't show.
+- **No privacy zones:** the public build doesn't hide the areas where runs often start or finish. That was decided on 2026-11-07, and the earlier zones were removed.
+- **Dropped names:** the names of my most-run neighbourhoods never appear, so cafes and streets named after them are left out.
+- **Dates:** a public build stores only the month and year of each run (the day is 0 in the data), so the run report shows "Jun 2025".
+- **The publish check:** `publish` scans the page text and also decodes the dataset compiled into the wasm. It fails on:
+  - a forbidden name in the text, the cafe and street names or the provenance metadata
+  - an exact run date
+  - coordinate-like metadata
+  - a wasm module without a readable dataset
 
 `data/`, `output/`, `docs/`, `wasm/cafe_tol/generated/` and `wasm/cafe_tol/build/` hold GPS data. They are gitignored and never committed. Publishing is manual: run `publish`, review `docs/`, then commit it yourself.
 

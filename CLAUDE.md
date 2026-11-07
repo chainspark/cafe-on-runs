@@ -57,16 +57,16 @@ A GD&T-style tolerance analysis of the owner's Garmin runs past Toronto cafes.
 - **`privacy.check`:**
   - scans the page text **and decodes every base64 wasm module**
   - rebuilds the module's memory image from the data section, finds `CAFETOL1` with a version 1 or 2 header, and decodes it
-  - scans the provenance metadata too: forbidden words, `[lat, lon]` pairs, and any decimal with 3+ places
+  - scans the provenance metadata too: forbidden words, and any decimal with 3+ places
   - recognises a base64 wasm module of any length
-  - zone-tests every run point, street point and cafe
   - name-scans the cafe and street names
   - **fails** on a wasm with no readable dataset
   - **fails** on a run that carries a day of the month: public builds store only year and month (`cafes._runs(public=True)` writes day 0). The page shows "Jun 2025".
 
   If the check fails, fix the cause. Don't loosen the check.
 - **Forbidden names:** the top-5 neighbourhoods by run count (`privacy.forbidden_names`).
-- **`data/privacy.json` holds the real zone centres and the random shifts.** It was copied from garmin-runs so both sites hide the same places with the same shifts. Keep it stable, because deleting it re-rolls the shifts.
+- **No privacy zones.** The owner removed them from the public build on 2026-11-07: it trims the first/last 500 m of each run, keeps month-and-year dates and drops the forbidden names, and no longer hides the areas where runs often start or finish. Don't reintroduce zones without asking.
+- **`data/privacy.json`** (zone centres used by garmin-runs) is no longer read here. Still never commit or publish it, and don't delete it, because garmin-runs depends on its stable shifts.
 
 ## Page
 - One dark drawing-sheet theme. Checker's notes are light yellow (`--note`); keep that colour apart from the reds of rejection and the purple of runs.

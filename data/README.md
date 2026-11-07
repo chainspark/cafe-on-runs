@@ -17,7 +17,7 @@ Run commands from the repository root as `python -m cafe_tolerance <command>`.
 | `opendata/toronto-centreline-tcl.geojson` | Toronto Centreline (TCL) in WGS84: every street, trail and walkway piece | City of Toronto Open Data (CKAN) | Open Government Licence – Toronto | `opendata.download` | Delete the file, then build | Public data, about 90 MB |
 | `opendata/neighbourhoods.geojson` | Neighbourhood boundaries | City of Toronto Open Data (CKAN) | Open Government Licence – Toronto | `opendata.download` (through `privacy.forbidden_names`) | Delete the file, then build | Public data. Used only to decide which names a public page must never show |
 | `opendata/*.source.json` | Provenance of each download: dataset title, resource name, last-modified date, download date | CKAN metadata | as above | `opendata.download` | Written with each download | Public. Files downloaded before these sidecars existed fall back to the file date |
-| `privacy.json` | Privacy zones: real centres, radii and random shifts | Derived from `tracks.parquet` by `privacy.zones` | n/a | `cafes --public`, `publish` | Rewritten on every public build, keeping the saved shifts | **SECRET.** Reveals where runs start and finish. Never commit, publish or share it, and don't delete it, because that re-rolls the shifts |
+| `privacy.json` | Privacy zones: real centres, radii and random shifts | Copied from garmin-runs, which writes it | n/a | Not read by this project since 2026-11-07 | Left as is | **SECRET.** Reveals where runs start and finish. Never commit, publish or share it, and don't delete it, because garmin-runs relies on its stable shifts |
 
 ## What reaches a page
 
@@ -31,10 +31,10 @@ Only a subset of this data is compiled into a page:
 
 The page lists that provenance under **About this project → Data sources**.
 
-Public builds are scrubbed first: the start and finish of each run are trimmed, privacy zones
-are removed, forbidden names are dropped, and each run keeps only the month and year it was run. `publish` then decodes the data back out of the
-page and refuses to publish anything that falls inside a private place. See the Privacy section
-of the top-level README.
+Public builds are scrubbed first: the first and last 500 m of each run are trimmed, forbidden
+names are dropped, and each run keeps only the month and year it was run. No privacy zones are
+applied. `publish` then decodes the data back out of the page and refuses to publish a forbidden
+name or an exact date. See the Privacy section of the top-level README.
 
 ## Attribution
 

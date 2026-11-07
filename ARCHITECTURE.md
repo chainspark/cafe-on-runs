@@ -51,7 +51,7 @@ from `file://`.
 | `cafe_blob.py` | Python | CAFETOL1 encoder/decoder; rebuilds a wasm module's memory image to find the dataset |
 | `cafes.py` | Python | Overpass fetch, run/street/cafe selection, export, Docker compile, page assembly |
 | `cafes.html` | HTML/JS | Page template: map layers, controls, panel, calls into the engine |
-| `privacy.py` | Python | Privacy zones, track scrubbing (`apply`), pre-publish scan (`check`), forbidden names |
+| `privacy.py` | Python | Track trim (`apply`), pre-publish scan (`check`), forbidden names |
 | `publish.py` | Python | Public build into `docs/` + privacy check; deletes the output if the check fails |
 | `wasm/cafe_tol/geom.hpp` | C++ | Projection, point-to-segment distance, canonical normal, uniform grid |
 | `dataset.{hpp,cpp}` | C++ | CAFETOL1 decode (and encode, for tests) |
@@ -76,13 +76,13 @@ Only `data/README.md` is tracked (`data/*` + `!data/README.md`). It documents ev
 | `cafes_osm.json` | `cafes.fetch_cafes` | `{"meta": {endpoint, query, osm_base, retrieved}, "cafes": [{osm_id (ways negative), name, lat, lon, brand}]}`. An older bare list is still read |
 | `opendata/*.geojson` | `opendata.download` | Street centreline and neighbourhood boundaries |
 | `opendata/*.source.json` | `opendata.download` | CKAN title, resource, last-modified and download date. `opendata.source()` falls back to the file date |
-| `privacy.json` | `privacy.zones` | Real zone centres and their random shifts. **Never publish this file.** Keep it stable |
+| `privacy.json` | garmin-runs | Privacy-zone centres used by garmin-runs. Not read by this project. **Never publish this file** |
 
 ### 3.2 Export (`cafes.export(public)`)
 
 1. **Tracks.**
    - Read `tracks.parquet`.
-   - Public build only: run `privacy.apply`, which trims the first and last 500 m of every run and removes every point inside a privacy zone.
+   - Public build only: run `privacy.apply`, which trims the first and last 500 m of every run.
    - Keep points inside the Toronto bounding box, and runs with at least 20 such points.
 2. **Runs.**
    - Split each run into **parts** wherever consecutive points are more than `GAP_M` = 50 m apart, by position or by `distance_m`. This covers privacy holes and GPS dropouts.
@@ -91,10 +91,10 @@ Only `data/README.md` is tracked (`data/*` + `!data/README.md`). It documents ev
    - Load the Overpass cache.
    - Drop the excluded places: chains, franchises and non-cafes, matched by OSM name or brand.
    - Keep cafes within `R_MAX_M` = 150 m of any run point. This is the largest R the page offers, so data beyond it is never needed. Keep it in sync with the R slider's `max`.
-   - Public build only: also drop cafes within (shifted zone radius + R_MAX_M) of any zone, and cafes whose name contains a forbidden word.
+   - Public build only: also drop cafes whose name contains a forbidden word.
 4. **Streets (the nominals).**
    - Keep centreline pieces of the runnable classes (Local, Collector, Minor/Major Arterial, Trail, Walkway) that come within R_MAX_M of a kept cafe.
-   - Public build only: drop pieces with any vertex inside a shifted zone, and pieces whose name contains a forbidden word.
+   - Public build only: drop pieces whose name contains a forbidden word.
 5. **Provenance.** `cafes._meta` records build info and the three data sources, with their licences, dates and counts (§4). It raises if anything coordinate-like slips in.
 6. **Encode** with `cafe_blob.encode`, then write `wasm/cafe_tol/generated/dataset_<target>.inc` as a comma-separated byte list.
 
@@ -140,7 +140,7 @@ coords     u32 n, then n × (zigzag-varint Δlat, zigzag-varint Δlon) in 1e-5°
               "date": "…", "detail": "counts in words"}]}
 ```
 
-Public builds report only cafes found, excluded and shown. They give no near-run count, because the gap would hint at the size of the privacy zones.
+Public builds report only cafes found, excluded and shown, with no near-run count. The rule dates from the privacy zones, whose size that gap would have hinted at.
 
 ## 5. The C++ engine
 
@@ -366,27 +366,27 @@ Two builds come from the same code:
 
 | | Private (`cafes`) | Public (`cafes --public`, `publish`) |
 |---|---|---|
-| Tracks | Full | 500 m start/finish trim. Every point inside a privacy zone is removed |
-| Cafes | All within 150 m of a run | Also drops cafes within (shifted zone radius + 150 m) and forbidden names |
-| Streets | All near kept cafes | Also drops pieces touching a shifted zone and forbidden names |
+| Tracks | Full | 500 m start/finish trim |
+| Run dates | Full | Month and year only (day stored as 0) |
+| Cafes | All within 150 m of a run | Also drops cafes whose name holds a forbidden word |
+| Streets | All near kept cafes | Also drops forbidden names |
 | Output | `output/cafe_tolerance.html` | `docs/index.html` (reviewed and committed by hand) |
 | Check | none | `privacy.check` must pass, or the files are deleted |
 
-**Privacy zones.** These are density clusters of run start and finish points. Each zone's
-radius is the 95th-percentile spread + 300 m, with a 600 m minimum. Its published centre is
-shifted at random by up to 200 m, and the shift is stored in `data/privacy.json` so the same
-place keeps the same shift across builds.
+**No privacy zones.** Earlier public builds also removed every point inside "privacy zones"
+around places where many runs start or finish. They were removed at the owner's request on
+2026-11-07. `data/privacy.json` still exists, for garmin-runs, but this project no longer reads it.
 
 **The check scans two places.** The GPS data sits inside base64-encoded WebAssembly, where a
 text scan of the HTML can't see it. `privacy.check` therefore looks in both:
 
-1. **Page text:** every `[lat, lon]` pair, and every forbidden word.
+1. **Page text:** every forbidden word.
 2. **Every embedded wasm module:**
-   1. Find each base64 run starting `AGFzbQ` (that's `\0asm`), whatever its length, and decode it. Even a tiny module could hide a coordinate pair.
+   1. Find each base64 run starting `AGFzbQ` (that's `\0asm`), whatever its length, and decode it. Even a tiny module could hide data.
    2. Rebuild the module's initial linear memory from its data section (`cafe_blob.wasm_memory_image`). The optimiser may split a static array into several segments, so the raw file can't simply be searched.
    3. Find every `CAFETOL1` with a supported (1 or 2) version header. The decoder's own magic constant is also in memory, so it gets skipped.
-   4. Decode each dataset and zone-test **every run point, street point and cafe** against the *real* centres, shrunk by the maximum shift.
-   5. Scan all cafe and street names **and the provenance metadata**, both raw and with escaped spelling, for forbidden words. Also scan the metadata for `[lat, lon]` pairs. Any decimal with 3+ places in the metadata fails the check.
+   4. Decode each dataset. A run carrying a day of the month (an exact date) fails the check.
+   5. Scan all cafe and street names **and the provenance metadata**, both raw and with escaped spelling, for forbidden words. Any decimal with 3+ places in the metadata fails the check.
 
    **A wasm module without a readable dataset fails the check.** Anything published must be scannable.
 

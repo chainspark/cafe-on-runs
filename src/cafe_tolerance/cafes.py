@@ -110,8 +110,7 @@ def _meta(public: bool, trim_m: float, runs: list[cafe_blob.Run], n_pts: int, n_
     """Provenance compiled into the dataset and shown on the page: sources, licences, dates, counts.
 
     Never coordinates (privacy.COORD_LIKE is enforced here and again by privacy.check), never any
-    activities.json field other than dates, and for public builds no count that hints at the size
-    of the privacy zones.
+    activities.json field other than dates.
     """
     from .opendata import source as street_source
 
@@ -119,8 +118,8 @@ def _meta(public: bool, trim_m: float, runs: list[cafe_blob.Run], n_pts: int, n_
     years = f"{min(dates).year}–{max(dates).year}" if dates else "none"
     run_detail = f"{len(runs):,} runs, {n_pts:,} GPS points, {years}, inside the City of Toronto."
     if public:
-        run_detail += (f" Public build: the first and last {trim_m:.0f} m of every run and every point in a "
-                       "privacy zone removed.")
+        run_detail += (f" Public build: the first and last {trim_m:.0f} m of every run removed; "
+                       "dates kept to month and year.")
     _, cmeta = _read_cafe_cache()
     if cmeta.get("osm_base"):
         c_kind, c_date = "OSM data as of", cmeta["osm_base"]
@@ -189,7 +188,7 @@ def _runs(t: pd.DataFrame, public: bool = False) -> list[cafe_blob.Run]:
     return runs
 
 
-def _streets(near: np.ndarray, forbidden: list[str], zones: list[dict] | None) -> list[cafe_blob.Street]:
+def _streets(near: np.ndarray, forbidden: list[str]) -> list[cafe_blob.Street]:
     """Centreline pieces (the nominals) within R_MAX of any kept cafe."""
     tree = cKDTree(_xy(near[:, 0], near[:, 1]))
     classes = {c: i for i, c in enumerate(STREET_CLASSES)}
@@ -214,8 +213,6 @@ def _streets(near: np.ndarray, forbidden: list[str], zones: list[dict] | None) -
             dense = np.vstack([xy[:-1] + (xy[1:] - xy[:-1]) * f_ for f_ in np.linspace(0, 1, max(2, int(seg.max() // 25) + 2))])
             if not np.isfinite(tree.query(dense, distance_upper_bound=R_MAX_M + 25)[0]).any():
                 continue
-            if zones and privacy._hidden(pts[:, 0], pts[:, 1], zones, shifted=True).any():
-                continue  # never export a street point inside a privacy zone
             out.append(cafe_blob.Street(int(p.get("CENTRELINE_ID") or 0), classes[p["FEATURE_CODE_DESC"]], name, pts))
     return out
 
@@ -226,7 +223,6 @@ def export(public: bool = False, trim_m: float = privacy.DEFAULT_TRIM_M, refresh
     t = _tracks(public, trim_m)
     runs = _runs(t, public)
     pts = np.vstack([p for r in runs for p in r.parts])
-    zones = privacy.zones() if public else None
     forbidden = privacy.forbidden_names() if public else []
 
     fetched = fetch_cafes(refresh_cafes)
@@ -245,16 +241,14 @@ def export(public: bool = False, trim_m: float = privacy.DEFAULT_TRIM_M, refresh
     near_run = np.isfinite(cKDTree(_xy(pts[:, 0], pts[:, 1])).query(_xy(c_ll[:, 0], c_ll[:, 1]),
                                                                      distance_upper_bound=R_MAX_M)[0])
     keep = near_run.copy()
-    if public:
-        grown = [z | {"radius_m": z["radius_m"] + R_MAX_M} for z in zones]  # no pass may touch a zone
-        keep &= ~privacy._hidden(c_ll[:, 0], c_ll[:, 1], grown, shifted=True)
+    if public:  # cafes named after a most-run neighbourhood would point at home
         keep &= np.array([not any(w.lower() in c["name"].lower() for w in forbidden) for c in raw])
     cafes = [cafe_blob.Cafe(c["lat"], c["lon"], int(c["osm_id"]), c["name"]) for c, k in zip(raw, keep) if k]
     print(f"Cafes: {len(fetched):,} in Toronto, {len(raw):,} after exclusions, "
           f"{int(near_run.sum()):,} within {R_MAX_M:.0f} m of a run, "
           f"{len(cafes):,} exported")
 
-    streets = _streets(np.array([[c.lat, c.lon] for c in cafes]).reshape(-1, 2), forbidden, zones)
+    streets = _streets(np.array([[c.lat, c.lon] for c in cafes]).reshape(-1, 2), forbidden)
     meta = _meta(public, trim_m, runs, len(pts), len(fetched), sum(dropped.values()), int(near_run.sum()),
                  len(cafes), len(streets))
     ds = cafe_blob.Dataset(cafe_blob.FLAG_PUBLIC if public else 0, runs, streets, cafes, meta)

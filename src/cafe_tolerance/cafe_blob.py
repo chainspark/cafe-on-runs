@@ -62,7 +62,7 @@ class Dataset:
     meta: dict = field(default_factory=dict)  # provenance: build info, data sources
 
     def all_points(self) -> np.ndarray:
-        """Every coordinate in the dataset, (n, 2) lat, lon - for the privacy scan."""
+        """Every coordinate in the dataset, (n, 2) lat, lon - counted in the privacy scan report."""
         arrs = [p for r in self.runs for p in r.parts] + [s.pts for s in self.streets]
         arrs.append(np.array([[c.lat, c.lon] for c in self.cafes]).reshape(-1, 2))
         return np.vstack([a for a in arrs if len(a)]) if any(len(a) for a in arrs) else np.empty((0, 2))
