@@ -119,7 +119,7 @@ tr.clickable { cursor: pointer } tr.clickable:hover td { background: color-mix(i
 .run-picker .leaflet-popup-content { margin: 0; width: 262px !important; font: 13px var(--f-body) }
 .run-picker a.leaflet-popup-close-button { color: var(--muted) }
 .run-picker .pk-title { padding: 8px 10px; border-bottom: 1px solid #3a434e; font: 600 13px var(--f-display); letter-spacing: .08em; text-transform: uppercase }
-.run-picker .pk-list { max-height: 260px; overflow-y: auto }
+.run-picker .pk-list { max-height: 260px; overflow-y: auto; position: relative }
 .run-picker button { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; width: 100%; text-align: left; padding: 6px 10px; border: 0; border-bottom: 1px solid var(--rule); background: transparent; color: var(--ink); cursor: pointer; font: 13px var(--f-body) }
 .run-picker button:hover, .run-picker button:focus-visible { background: color-mix(in srgb, var(--accent) 14%, transparent) }
 .run-picker .sub { font-size: 12px; color: var(--muted) } .run-picker .r { font: 11.5px var(--f-mono); color: var(--muted); text-align: right }
@@ -147,7 +147,9 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 #search { font: 14px var(--f-body); padding: 7px 9px; border: 1.5px solid var(--frame); background: var(--field); color: var(--ink); min-width: 0; flex: 1 }
 .count { font: 13px var(--f-mono); color: var(--muted) }
 .count b { color: var(--ok); font-size: 16px }
-.tablewrap { overflow: auto }
+/* position: relative makes the scroll box the containing block of the absolute .vh labels inside it;
+   without it they escape the clip and stretch the page far below the sheet */
+.tablewrap { overflow: auto; position: relative }
 .tablewrap.tall { max-height: 460px; border-top: 1px solid var(--rule) }
 table { border-collapse: collapse; width: 100%; font-size: 13px }
 th, td { text-align: left; padding: 6px 7px; border-bottom: 1px solid var(--rule); vertical-align: middle }
