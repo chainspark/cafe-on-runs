@@ -29,7 +29,8 @@ A GD&T-style tolerance analysis of the owner's Garmin runs past Toronto cafes.
   - **Streets:** centreline pieces (`opendata.STREET_CLASSES`) within 150 m of a kept cafe.
   - The output is `wasm/cafe_tol/generated/dataset_<private|public>.inc`, which is **gitignored because it holds GPS data**.
 - **`cafes.compile_wasm`** runs `build.sh <target>` in Docker and writes `wasm/cafe_tol/build/cafe_tol_<target>.js` (also gitignored), with the wasm inlined (`-sSINGLE_FILE`) so the page works from `file://`.
-- **`cafes.build`** inlines that JS into `cafes.html` and writes `output/cafe_tolerance.html`, or `<out>/index.html` when public.
+- **`cafes.build`** inlines `cafes.css`, `cafes.js` (the page app) and that wasm JS into the `cafes.html` shell, then writes `output/cafe_tolerance.html`, or `<out>/index.html` when public. The built page stays one self-contained file.
+  - The page source is split three ways: markup in `cafes.html`, style in `cafes.css`, behaviour in `cafes.js`. The zone marks, the sliders (`SLIDERS`) and the About callout symbols are drawn by `cafes.js`.
 
 ## GD&T model (keep the C++, the page text and the README in sync)
 - **Point matching:** each point goes to the nearest centreline piece within 25 m whose heading is within 35°, ignoring direction. A match to another street shorter than 4 points is treated as a blip and left unmatched.
