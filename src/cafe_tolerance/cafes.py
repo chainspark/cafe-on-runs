@@ -36,7 +36,9 @@ from .parse import TRACKS
 OUT = Path("output")
 ROOT = Path(__file__).resolve().parents[2]
 WASM = ROOT / "wasm" / "cafe_tol"
-TEMPLATE = Path(__file__).with_name("cafes.html")
+TEMPLATE = Path(__file__).with_name("cafes.html")  # the page shell; build() inlines the two files below into it
+STYLE = TEMPLATE.with_name("cafes.css")
+APP = TEMPLATE.with_name("cafes.js")
 IMAGE = "emscripten/emsdk:4.0.10"
 
 CAFES_CACHE = DATA / "cafes_osm.json"
@@ -278,8 +280,13 @@ def build(out_dir: Path = OUT, public: bool = False, trim_m: float = privacy.DEF
           refresh_cafes: bool = False) -> Path:
     target = "public" if public else "private"
     export(public, trim_m, refresh_cafes)
-    js = compile_wasm(target).read_text(encoding="utf-8").replace("</script", "<\\/script")
+    script = lambda p: p.read_text(encoding="utf-8").replace("</script", "<\\/script")
+    js = script(compile_wasm(target))
+    # one self-contained page: the style, the app and the wasm are inlined first, so the
+    # __MODE__ / __BUILT__ tokens are filled wherever they appear (cafes.js reads __MODE__)
     page = (TEMPLATE.read_text(encoding="utf-8")
+            .replace("/*__CSS__*/", STYLE.read_text(encoding="utf-8"))
+            .replace("/*__APP__*/", script(APP))
             .replace("/*__WASM__*/", js)
             .replace("__MODE__", "public" if public else "private")
             .replace("__BUILT__", html.escape(dt.date.today().isoformat())))

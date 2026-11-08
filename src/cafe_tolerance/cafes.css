@@ -1,0 +1,265 @@
+/* A dark engineering drawing sheet: zone-marked border, title block, the map as the main view, the
+   inspection panel beside it. Checker's notes are written on it in a light-yellow pen. */
+:root {
+  --paper: #0c0f13; --sheet: #151a20; --ink: #e2e8ee; --ink-2: #c3ccd5; --muted: #97a3b0; --rule: #2a323c; --rule-2: #3a434e; --frame: #c3ccd5;
+  --white: #f6f7f9;  /* the run view, and the GD&T callouts drawn on the map */
+  --ink-dark: #18232e; --pop: #1b2129;  /* callout ink; tooltip and picker background */
+  --accent: #74a3ff; --zone: #ff6d6d; --ok: #4cc38a; --bad: #ff8466; --amber: #f0b44c;
+  --chip-ok: #143326; --chip-bad: #3a1d16; --chip-mid: #232a33; --field: #11151a;
+  --map-bg: #1c2026; --map-ink: #e6ebf0;
+  --s-both: #4cc38a; --s-pos: #79a8ff; --s-prof: #b9a8ff; --s-apart: #f0b44c; --s-none: #ff8466; --s-few: #7e8996;
+  --run: #ff9f1a;   /* the selected run: orange, apart from the salmon of "neither" and the yellow of notes */
+  --note: #fff0a0;  /* checker's notes: light yellow, apart from the reds of rejection and the purple of runs */
+  --tip-ok: #4cc38a; --tip-bad: #ff6d6d;
+  --f-display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "B612 Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --f-pen: "Caveat", "Segoe Print", cursive;
+  color-scheme: dark;
+}
+* { box-sizing: border-box }
+html, body { margin: 0 }
+body { background: var(--paper); color: var(--ink); font: 14px/1.55 var(--f-body);
+  padding: 20px max(12px, env(safe-area-inset-right)) 40px max(12px, env(safe-area-inset-left)) }
+/* the drawing border: zone numbers along the top and bottom, letters down the sides */
+.frame { max-width: 1440px; margin: 0 auto; display: grid; grid-template-columns: 22px minmax(0, 1fr) 22px; grid-template-rows: 22px auto 22px;
+  background: var(--sheet); border: 1px solid var(--muted); box-shadow: 0 12px 36px rgba(0,0,0,.55) }
+.zones { display: flex; justify-content: space-around; align-items: center; font: 500 11px var(--f-display); color: #8a96a3; user-select: none }
+.zones.h { grid-column: 2 } .zones.top { grid-row: 1 } .zones.bottom { grid-row: 3 }
+.zones.v { grid-row: 2; flex-direction: column } .zones.zl { grid-column: 1 } .zones.zr { grid-column: 3 }
+.sheet { grid-column: 2; grid-row: 2; border: 2px solid var(--frame); padding: 22px clamp(12px, 2.4vw, 28px); display: grid; gap: 18px; min-width: 0 }
+@media (max-width: 640px) { .frame { grid-template-columns: 0 minmax(0, 1fr) 0; grid-template-rows: 0 auto 0 } .zones { display: none } }
+h1, h2, h3 { font-family: var(--f-display); margin: 0; line-height: 1.15; text-wrap: balance }
+h1 { font-size: clamp(30px, 4.6vw, 48px); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; line-height: 1 }
+h3 { font-size: 18px; font-weight: 600; letter-spacing: .02em; display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+p { margin: 0; max-width: 75ch }
+/* drawing lettering: the labels, headings of tables and tabs share it; each sets its own size and colour */
+.eyebrow, th, .tabs button, .viewbar button, .tblock div:nth-child(odd), .run-picker .pk-title, .kpi .k, .lot-fig figcaption {
+  font-family: var(--f-display); letter-spacing: .08em; text-transform: uppercase }
+.eyebrow { font-size: 13px; font-weight: 500; line-height: 1.2; color: var(--muted) }
+/* the introduction fills the width beside the title block, a size up from body text */
+header .intro p.muted { color: var(--ink-2); max-width: none; font-size: 16.5px; line-height: 1.6 }
+header .intro p.muted .lead { color: var(--ink); font-weight: 650 }
+.muted { color: var(--muted) }
+header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: end; border-bottom: 2px solid var(--frame); padding-bottom: 14px }
+header .intro { display: grid; gap: 8px; min-width: 0 }
+.tblock { border: 1.5px solid var(--frame); display: grid; grid-template-columns: auto auto; font: 12px/1.3 var(--f-mono); background: var(--field) }
+.tblock div { padding: 5px 10px; border-bottom: 1px solid var(--rule) }
+.tblock div:nth-child(odd) { color: var(--muted); border-right: 1px solid var(--rule); font-size: 13px; font-weight: 500; line-height: normal }
+.tblock div:nth-last-child(-n+2) { border-bottom: 0 }
+@media (max-width: 760px) { header { grid-template-columns: 1fr } .tblock { justify-self: start } }
+
+.app { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(320px, 1fr); border: 1.5px solid var(--frame); background: var(--sheet) }
+@media (max-width: 980px) { .app { grid-template-columns: minmax(0, 1fr) } }
+.left { display: grid; align-content: start; min-width: 0 }
+#map { height: min(72vh, 720px); min-height: 360px; background: var(--map-bg) }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 9px 12px; font: 500 13px var(--f-display); letter-spacing: .02em; color: var(--map-ink); background: var(--map-bg) }
+.legend span { display: inline-flex; align-items: center; gap: 6px }
+/* status symbols: shape as well as colour (● both, ◐ ⌖ only, ◑ ⌒ only, ◎ apart, ○ neither, · few) */
+.sym { width: 12px; height: 12px; flex: none; vertical-align: -1px; overflow: visible }
+.legend .pen, .notes .pen, .mark { font-family: var(--f-pen); color: var(--note) }
+.legend .pen { font-size: 18px; font-weight: 700; line-height: 1 }
+.mark { font-size: 17px; font-weight: 700; margin-right: 5px; line-height: 1; display: inline-block; text-decoration: none }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
+[hidden] { display: none !important }
+/* two views of one drawing: the cafe view (datum, blue) and the run view (part, white) */
+.viewbar { display: flex; flex-wrap: wrap; border-bottom: 1.5px solid var(--frame); background: var(--sheet) }
+.viewbar button { display: flex; align-items: center; gap: 8px; padding: 9px 14px; border: 0; border-right: 1.5px solid var(--frame); background: var(--sheet);
+  color: var(--ink-2); cursor: pointer; font-size: 14px; font-weight: 600 }
+.viewbar button span { font-weight: 400; letter-spacing: .04em; text-transform: none; opacity: .85 }
+.viewbar button::before { content: ""; width: 10px; height: 10px; background: var(--accent) }
+#view-run::before { background: var(--white) }
+#view-cafe[aria-selected="true"] { background: var(--accent); color: var(--paper) }
+#view-run[aria-selected="true"] { background: var(--white); color: var(--paper) }
+.viewbar button[aria-disabled="true"] { color: #5b6672; cursor: not-allowed }
+.viewctx { flex: 1 1 200px; display: flex; align-items: center; justify-content: flex-end; padding: 6px 14px; font: 12px var(--f-mono); color: var(--ink-2); text-align: right }
+.mapwrap { position: relative; border-top: 3px solid var(--accent) }
+.mapwrap.run { border-top-color: var(--white) }
+.view-label { position: absolute; left: 10px; bottom: 10px; z-index: 1000; padding: 3px 8px; background: rgba(12,15,19,.85); border: 1.5px solid var(--accent);
+  color: var(--accent); font: 600 13px var(--f-display); letter-spacing: .1em; pointer-events: none }
+.mapwrap.run .view-label { border-color: var(--white); color: var(--white) }
+.back-run { position: absolute; right: 10px; top: 10px; z-index: 1000; padding: 6px 10px; border: 1.5px solid var(--white); background: rgba(12,15,19,.9);
+  color: var(--white); cursor: pointer; font: 12px var(--f-mono) }
+.leaflet-control-fit a { font: 17px/30px var(--f-mono); text-align: center; cursor: pointer }
+.run-end { display: inline-block; transform: translate(-50%, -50%); min-width: 20px; padding: 0 3px; box-sizing: border-box; border: 2px solid var(--run); background: var(--paper);
+  color: var(--run); font: 700 10px/16px var(--f-mono); text-align: center }
+.legend .runline { display: inline-block; width: 22px; height: 0; border-top: 2.6px solid var(--run); vertical-align: middle }
+.legend .badge { display: inline-flex; width: 16px; height: 16px; border-radius: 50%; box-sizing: border-box; align-items: center; justify-content: center; font: 700 9.5px var(--f-mono) }
+.legend .badge.ok { background: var(--s-both); color: var(--paper) }
+.legend .badge.no { border: 2px solid var(--s-none); color: var(--s-none) }
+.legend .faintdot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--muted) }
+/* run inspection: panel tabs, the run report, the map picker and the highlighted run */
+.tabs { display: flex; border: 1.5px solid var(--frame) }
+.tabs button { flex: 1; padding: 8px; border: 0; cursor: pointer; font-size: 14px; font-weight: 600; background: var(--sheet); color: var(--ink) }
+.tabs button + button { border-left: 1.5px solid var(--frame) }
+.tabs button[aria-selected="true"] { background: var(--ink); color: var(--sheet) }
+.tabpane { display: grid; gap: 14px; min-width: 0 }
+.stack-s { display: grid; gap: 6px; min-width: 0 }
+.rr-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px }
+.rr-head h3 { font-size: 24px }
+.rr-nav { display: flex; gap: 6px; flex: none }
+.rr-nav button { width: 34px; height: 34px; border: 1.5px solid var(--frame); background: var(--field); color: var(--ink); cursor: pointer }
+.rr-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1.5px solid var(--frame) }
+.rr-stats div { padding: 7px 10px } .rr-stats div + div { border-left: 1px solid var(--rule-2) }
+.rr-stats b { display: block; font: 700 18px var(--f-mono) }
+/* marks sit on the line; marks too close to fit side by side move to a lane above or below */
+.rr-strip { position: relative; height: 86px; margin: 0 12px }
+.rr-strip .line { position: absolute; left: 0; right: 0; top: 34px; height: 2px; background: var(--frame) }
+.rr-strip .end { position: absolute; top: 28px; width: 2px; height: 14px; background: var(--frame) }
+.rr-strip .end.r, .rr-strip .km.r { right: 0 } .rr-strip .end.l, .rr-strip .km.l { left: 0 }
+.rr-strip .km { position: absolute; top: 70px; font: 11px var(--f-mono); color: var(--muted) }
+.rr-strip button { position: absolute; transform: translateX(-50%); width: 22px; height: 22px; border-radius: 50%; border: 2px solid; padding: 0; cursor: pointer; font: 700 10.5px var(--f-mono);
+  border-color: var(--s-none); background: var(--sheet); color: var(--s-none) }
+.rr-strip button.ok { border-color: var(--s-both); background: var(--s-both); color: var(--paper) }
+tr.clickable { cursor: pointer } tr.clickable:hover td { background: color-mix(in srgb, var(--accent) 10%, transparent) }
+.runs-table { max-height: 300px }
+.yes { color: var(--ok) } .no { color: var(--bad) }
+/* one run's offsets along the street at the selected cafe, against the profile band */
+.rr-section { border-top: 1.5px solid var(--frame); padding-top: 12px }
+.rr-profile { display: block; width: 100%; height: auto; background: var(--field); border: 1px solid var(--rule-2); font: 10px var(--f-mono) }
+.rr-profile path, .rr-profile polyline { fill: none }
+.rr-profile text { fill: var(--muted) } .rr-profile text.bd { fill: #9cc0ff }
+.rr-profile .bandfill { fill: var(--accent); fill-opacity: .12 } .rr-profile .bandedge { stroke: #9cc0ff; stroke-dasharray: 5 3 }
+.rr-profile .nom { stroke: var(--accent); stroke-width: 1.2; stroke-dasharray: 14 3 2 3 } .rr-profile .datum { stroke: var(--muted); stroke-dasharray: 2 3 }
+.rr-profile .run { stroke-width: 2; stroke-linejoin: round; stroke: var(--s-none) } .rr-profile .run.ok { stroke: var(--s-both) }
+.rr-profile .lead { stroke: var(--white); stroke-dasharray: 2 2 } .rr-profile circle { fill: var(--white) }
+.run-picker .leaflet-popup-content-wrapper { background: var(--pop); color: var(--ink); border: 1.5px solid var(--frame); border-radius: 0; box-shadow: 0 8px 22px rgba(0,0,0,.6) }
+.run-picker .leaflet-popup-tip { background: var(--pop) }
+.run-picker .leaflet-popup-content { margin: 0; width: 262px !important; font: 13px var(--f-body) }
+.run-picker a.leaflet-popup-close-button { color: var(--muted) }
+.run-picker .pk-title { padding: 8px 10px; border-bottom: 1px solid var(--rule-2); font-size: 13px; font-weight: 600; line-height: normal }
+.run-picker .pk-foot { padding: 8px 10px; font: 12px var(--f-body); color: var(--muted) }
+.run-picker .pk-list { max-height: 260px; overflow-y: auto; position: relative }
+.run-picker button { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; width: 100%; text-align: left; padding: 6px 10px; border: 0; border-bottom: 1px solid var(--rule); background: transparent; color: var(--ink); cursor: pointer; font: 13px var(--f-body) }
+.run-picker button:hover, .run-picker button:focus-visible { background: color-mix(in srgb, var(--accent) 14%, transparent) }
+.run-picker .sub { font-size: 12px; color: var(--muted) } .run-picker .r { font: 11.5px var(--f-mono); color: var(--muted); text-align: right }
+.run-arrow { width: 0; height: 0; border-left: 9px solid var(--run); border-top: 5px solid transparent; border-bottom: 5px solid transparent; transform-origin: 50% 50% }
+.notes { border-left: 2px solid var(--note); padding: 2px 0 2px 12px; display: grid; gap: 1px }
+.notes .eyebrow { color: var(--note) }
+.notes .pen { font-size: 21px; font-weight: 600; line-height: 1.2 }
+.detail { padding: 16px 18px 18px; display: grid; gap: 10px; border-top: 1.5px solid var(--frame) }
+.panel { padding: 16px 18px; display: grid; gap: 14px; align-content: start; border-left: 1.5px solid var(--frame); min-width: 0 }
+@media (max-width: 980px) { .panel { border-left: 0; border-top: 1.5px solid var(--frame) } }
+.controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px }
+@media (max-width: 420px) { .controls { grid-template-columns: minmax(0, 1fr) } }
+.ctl { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; min-width: 0 }
+.ctl label { font: 500 14px var(--f-display) }
+.ctl output { font: 600 13px var(--f-mono); color: var(--accent); font-variant-numeric: tabular-nums }
+.ctl input { grid-column: 1 / -1; width: 100%; accent-color: var(--accent) }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+.seg { display: inline-flex; border: 1.5px solid var(--frame) }
+.seg button, .chipbtn { font: 600 12px var(--f-mono); padding: 6px 11px; border: 0; background: var(--sheet); color: var(--ink); cursor: pointer }
+.seg button + button { border-left: 1.5px solid var(--frame) }
+.seg button[aria-pressed="true"], .chipbtn[aria-pressed="true"] { background: var(--ink); color: var(--sheet) }
+.chipbtn { border: 1.5px solid var(--frame); padding: 4px 8px }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+#search { font: 14px var(--f-body); padding: 7px 9px; border: 1.5px solid var(--frame); background: var(--field); color: var(--ink); min-width: 0; flex: 1 }
+.count { font: 13px var(--f-mono); color: var(--muted) }
+.count b { color: var(--ok); font-size: 16px }
+/* position: relative makes the scroll box the containing block of the absolute .vh labels inside it;
+   without it they escape the clip and stretch the page far below the sheet */
+.tablewrap { overflow: auto; position: relative }
+.tablewrap.tall { max-height: 460px; border-top: 1px solid var(--rule) }
+table { border-collapse: collapse; width: 100%; font-size: 13px }
+th, td { text-align: left; padding: 6px 7px; border-bottom: 1px solid var(--rule); vertical-align: middle }
+th { font-size: 12px; font-weight: 500; line-height: normal; color: var(--muted); position: sticky; top: 0; background: var(--sheet) }
+td.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap }
+tr.sel td { background: color-mix(in srgb, var(--accent) 12%, transparent) }
+.linkbtn { font: 500 13px var(--f-body); color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-align: left; text-decoration: underline; text-underline-offset: 3px }
+.chip { font: 600 11px/1 var(--f-mono); letter-spacing: .03em; padding: 4px 7px; border-radius: 3px; white-space: nowrap; display: inline-block }
+.chip.ok { background: var(--chip-ok); color: var(--ok) }
+.chip.bad { background: var(--chip-bad); color: var(--bad) }
+.chip.mid { background: var(--chip-mid); color: var(--ink) }
+.chip.amber { background: var(--chip-mid); color: var(--amber) }
+.chip.st { background: var(--field); color: var(--ink); border: 1px solid var(--rule-2); display: inline-flex; gap: 6px; align-items: center; padding: 3px 7px }
+.frame-row { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center }
+.fcf { display: inline-flex; border: 1.5px solid var(--frame); font: 600 14px/1 var(--f-mono); background: var(--field) }
+.fcf > span { padding: 7px 10px; border-right: 1.5px solid var(--frame); display: flex; align-items: center }
+.fcf > span:last-child { border-right: 0 }
+.fcf svg { width: 16px; height: 16px; stroke: var(--ink); fill: none; stroke-width: 1.6 }
+.actual { font: 12.5px var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums }
+.hint { font-size: 12px; color: var(--muted) }
+.hist { width: 100%; max-width: 520px; height: auto; display: block }
+.hist text { font: 500 11px var(--f-mono); fill: var(--muted) }
+.hist .z { fill: var(--zone) } .hist .ok { fill: var(--ok) } .hist .bad { fill: var(--bad) }
+.hist .axis { stroke: var(--muted) } .hist .tol { stroke: var(--zone); stroke-dasharray: 5 4 }
+.status-line { font: 12px var(--f-mono); color: var(--muted) }
+footer { border-top: 2px solid var(--frame); padding-top: 10px; font: 12px var(--f-mono); color: var(--muted); display: grid; gap: 4px }
+.leaflet-container { font: 12px var(--f-body) }
+.leaflet-tooltip.cafe-tip { font: 600 11px var(--f-mono); background: var(--map-bg); color: var(--map-ink); border: 1px solid #3a424d; box-shadow: none }
+.leaflet-tooltip.cafe-tip::before { display: none }
+.leaflet-tooltip.cafe-tip.label { padding: 1px 5px; font-size: 10.5px; background: rgba(28,32,38,.82); border-color: transparent }
+/* tooltips: one floating element, positioned in the viewport so scrolling tables never clip it */
+.tipped { text-decoration: underline dotted; text-decoration-color: var(--muted); text-underline-offset: 3px; cursor: help }
+.fcf.tipped, .chip.tipped, svg.tipped { text-decoration: none }
+#tip { position: fixed; z-index: 2000; max-width: min(320px, calc(100vw - 16px)); background: var(--pop); color: var(--ink); border: 1.5px solid var(--muted);
+  font: 13px/1.45 var(--f-body); padding: 9px 11px; box-shadow: 0 8px 22px rgba(0,0,0,.55); pointer-events: none }
+#tip b { display: block; font-weight: 650; margin-bottom: 2px }
+#tip .def { font: 11.5px var(--f-mono); opacity: .8; margin-top: 5px }
+/* tooltip infographics: schematic, drawn in the tooltip's own (inverted) colours */
+#tip svg.fig { display: block; width: 300px; max-width: 100%; height: auto; margin: 8px 0 2px; font: 10.5px var(--f-mono); overflow: visible }
+#tip .fig text { fill: currentColor }
+#tip .fig .fr, #tip .fig .dim { fill: none; stroke: currentColor; stroke-width: 1 }
+#tip .fig .nom { fill: none; stroke: currentColor; stroke-opacity: .7; stroke-width: 1.2; stroke-dasharray: 14 3 2 3 }
+/* zones are neutral (the tip's own text colour); only the runs carry pass / fail colour */
+#tip .fig .zone { fill: currentColor; fill-opacity: .1; stroke: currentColor; stroke-opacity: .8; stroke-width: 1.4; stroke-dasharray: 5 3 }
+#tip .fig .zfill { fill: currentColor; fill-opacity: .1 }
+#tip .fig .zedge { stroke: currentColor; stroke-opacity: .8; stroke-width: 1.4; stroke-dasharray: 5 3 }
+#tip .fig .ok { fill: none; stroke: var(--tip-ok); stroke-width: 2; stroke-linejoin: round }
+#tip .fig .bad { fill: none; stroke: var(--tip-bad); stroke-width: 2; stroke-linejoin: round }
+#tip .fig .thin { stroke-width: 1; stroke-dasharray: 3 3 }
+#tip .fig .okt { fill: var(--tip-ok); font-weight: 600 } #tip .fig .badt { fill: var(--tip-bad); font-weight: 600 }
+#tip .fig .zt { fill: currentColor; font-weight: 600 }
+#tip .fig .dot { fill: currentColor } #tip .fig .bdot { fill: var(--tip-bad) }
+/* GD&T annotations drawn on the map for the selected cafe (drawing-sheet style, light on the dark map) */
+.anno { pointer-events: none; font: 600 11px var(--f-mono); color: var(--ink-dark); white-space: nowrap }
+.anno .box { position: absolute; top: 0; left: 0; transform: translate(0, -50%); background: var(--white); border: 1.5px solid var(--ink-dark); box-shadow: 0 2px 8px rgba(0,0,0,.5) }
+.anno.left .box { transform: translate(-100%, -50%) }
+.anno .fr { display: flex }
+.anno .fr > span { padding: 3px 7px; border-right: 1.5px solid var(--ink-dark); display: flex; align-items: center }
+.anno .fr > span:last-child { border-right: 0 }
+.anno svg { width: 12px; height: 12px; stroke: var(--ink-dark); fill: none; stroke-width: 1.8 }
+.anno .act { border-top: 1px solid #c7d0d9; padding: 2px 7px 3px; font-weight: 500; font-size: 10.5px; color: #3a4552 }
+.anno .act b { font-weight: 700 } .anno .ok { color: #19805a } .anno .bad { color: #b8432b }
+.anno .datum { padding: 2px 7px; font-size: 12px }
+.anno .dim { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); background: rgba(28,32,38,.88); color: var(--white); padding: 0 4px; border-radius: 2px; font-size: 10.5px }
+/* a checker's note written on the map next to the selected cafe */
+.anno.note .pen { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); font: 700 20px/1.1 var(--f-pen); color: var(--note);
+  white-space: nowrap; text-shadow: 0 0 3px var(--map-bg), 0 0 3px var(--map-bg), 0 0 6px var(--map-bg) }
+.toggle { display: inline-flex; gap: 6px; align-items: center; font-size: 13px }
+.toggle input { accent-color: var(--accent); width: 15px; height: 15px }
+.about { border: 1.5px solid var(--frame); background: var(--sheet); color: var(--ink-2); padding: 18px 20px 20px; display: grid; gap: 18px; scroll-margin-top: 12px }
+.about h2 { font-family: var(--f-display); font-size: 22px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; margin: 0 }
+.about h3 { font-size: 15px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink) }
+.about b { color: var(--ink) }
+/* balanced columns, so a tall section doesn't leave a hole beside it (a row-based grid did) */
+.about-grid { columns: 3 320px; column-gap: 36px }
+.about-grid > section { break-inside: avoid; margin: 0 0 22px }
+.about section { display: grid; gap: 7px; align-content: start; min-width: 0 }
+.about ul { margin: 0; padding-left: 18px; display: grid; gap: 4px }
+.about p { max-width: 70ch }
+.about a, .intro a { color: var(--accent); text-underline-offset: 3px }
+/* the lot: run stats and a run-density map, under "What this is" */
+.lot { display: grid; gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--rule) }
+.lot .hint { margin: 0 }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: 8px }
+.kpi { border: 1px solid var(--rule); background: var(--field); padding: 8px 10px; display: grid; gap: 2px; align-content: start; min-width: 0 }
+.kpi .k { font-size: 11.5px; font-weight: 500; line-height: normal; color: var(--muted); justify-self: start }
+.kpi .v { font: 600 22px/1.15 var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums }
+.kpi .s { font-size: 12px; color: var(--muted) }
+.lot-fig { margin: 0; display: grid; gap: 5px }
+.lot-fig figcaption { font-size: 12.5px; font-weight: 500; line-height: normal; color: var(--ink) }
+.lot-fig figcaption .hint { text-transform: none; letter-spacing: 0; font-family: var(--f-body) }
+#lot-months { width: 100%; height: auto; display: block }
+#lot-months text { font: 500 10.5px var(--f-mono); fill: var(--muted) }
+#lot-months .bar { fill: #9a90f0 } #lot-months .bar.on { fill: #e8e4ff }
+#lot-months .hit { fill: transparent } #lot-months .base { stroke: var(--rule) }
+.heat { position: relative; border: 1px solid var(--rule); background: var(--field); cursor: crosshair; touch-action: manipulation }
+.heat canvas { display: block; width: 100%; height: auto }
+.heat svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible }
+.heat svg text { font: 600 11px var(--f-mono); fill: var(--muted) } .heat svg .scale { stroke: var(--muted); stroke-width: 1.5; fill: none }
+.heat svg .ring { fill: none; stroke: #fff; stroke-width: 1.5; stroke-opacity: .9 }
+.heat-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font: 11.5px var(--f-mono); color: var(--muted); align-items: center }
+.heat-legend .grad { display: inline-block; width: 120px; height: 8px; border-radius: 4px }
+.heat-legend .hint { font-family: var(--f-body) }
+#sources td { vertical-align: top } #sources td:first-child { font-weight: 600; white-space: nowrap }
