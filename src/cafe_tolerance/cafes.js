@@ -82,6 +82,7 @@
     "st-p95": ["⌒ p95", "95th-percentile profile actual on this street, in metres: 95% of passes stay within this band width."],
     "st-bias": ["Bias", "Average sideways offset from the centreline. N/S for east-west streets, W/E for north-south ones. A sidewalk run sits a few metres off by design."],
     "view-cafe": ["Cafe view (datum)", "Zoomed on one cafe: its search circle, band and zone, every run as the purple glow, every cafe as a status symbol. Selecting any cafe shows this view."],
+    "no-run": ["No run selected", "Click a run on the map to see its report. Where several runs overlap, a list lets you pick one by date. You can also select a cafe and click a row under \"Runs at this cafe\"."],
     "view-run": ["Run view (part)", "The whole run in orange, everything else dimmed. The cafes it passed within R are numbered in route order (filled = accepted, hollow = rejected); every other cafe is a faint dot. Selecting any run shows this view."],
     "runs-table": ["Runs at this cafe", "One row per run (part) that came within R: its Ø (twice the closest approach), its ⌒ actual (twice its largest offset), the two verdicts and the result. Click a row to inspect that run."],
     "run-strip": ["Route strip", "The run as one line from start to finish. Each mark is a cafe, placed where along the run it was passed: filled = accepted, hollow = rejected. Click one to select that cafe."],
@@ -216,6 +217,7 @@
     if (e.pointerType === "mouse") { if (el && el.matches("input")) hideTip(); return; }
     if (el && el.classList.contains("tipped")) { if (tipFor === el) hideTip(); else showTip(el); }  // tap to show on touch
     else if (el && el.matches('label, input[type="range"]')) showTip(el);  // a tapped slider takes no focus, so show its tip here
+    else if (el && el.matches('[aria-disabled="true"]')) showTip(el);  // a tapped control that can't act yet says why
     else if (!el) hideTip();
   });
   document.addEventListener("focusin", e => { const el = e.target.closest("[data-tip]"); if (el) showTip(el); });
@@ -928,7 +930,11 @@
       $("view-ctx").textContent = `${cafeName[state.sel]} · ${r.runs} runs · ${STATUS[r.status].label}`;
     }
     setTab(run ? "run" : "cafes");
-    $("tab-run-btn").setAttribute("aria-disabled", !run && state.lastRun < 0);
+    // until a run has been picked the Run report tab has nothing to show, so its tip says how to pick one
+    const noRun = !run && state.lastRun < 0, tab = $("tab-run-btn");
+    tab.setAttribute("aria-disabled", noRun);
+    if (noRun) tab.dataset.tip = "no-run";
+    else { if (tipFor === tab) hideTip(); delete tab.dataset.tip; }
     const want = run ? "run" : "cafe";
     if ($("legend").dataset.view !== want) { $("legend").dataset.view = want; $("legend").innerHTML = run ? RUN_LEGEND() : CAFE_LEGEND(); decorateTips($("legend")); }
   }
